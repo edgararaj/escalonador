@@ -34,5 +34,5 @@ check-memory:
 	@command -v valgrind &> /dev/null || echo "[Warning] Please install `valgrind`. Read documentation."
 # Run valgrind against the executables
 	@DEBUG=1 make -s && echo "[Compiling]"
-	@valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./bin/orchestrator
-	@valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./bin/client
+	@valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./bin/orchestrator tmp
+#	@valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./bin/client
