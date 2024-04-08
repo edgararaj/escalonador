@@ -172,41 +172,39 @@ int main(int argc, char* argv[])
     Queue q;
     initQueue(&q);
 
-    inQueue("./test.sh", 10, &q);
-    inQueue("./test.sh", 10, &q);
-    inQueue("./test.sh", 10, &q);
-    inQueue("./test.sh", 10, &q);
-    inQueue("./test.sh", 10, &q);
-    inQueue("./test.sh", 10, &q);
+    inQueue("test/hello 1", 10, &q);
+    inQueue("test/void 2", 10, &q);
+    inQueue("test/hello 3", 10, &q);
+    inQueue("test/void 4", 10, &q);
 
     // // sequential execution
-    // Bin a;
-    // while (deQueue(&q, &a)) {
-    //     mysystem(a.ficheiro, argv[1]);
-    //     printf("------\n");
-    // }
+    Bin a;
+    while (deQueue(&q, &a)) {
+        mysystem(a.ficheiro, argv[1]);
+        printf("------\n");
+    }
 
     // // parallel execution
-    int N = 4;
+    // int N = 6;
 
-    while (q.uti) {
-        for (int i = 0; i < N; i++) {
-            Bin a;
-            if (deQueue(&q, &a)) {
-                pid_t cpid = fork();
-                if (cpid == 0) {
-                    mysystem(a.ficheiro, argv[1]);
-                    _exit(0);
-                } else if (cpid > 0) {
-                    free(a.ficheiro);
-                }
-            }
-        }
-        int status;
-        while (wait(&status) > 0) {
-            // printf("child returned: %d\n", WEXITSTATUS(status));
-        }
-    }
+    // while (q.uti) {
+    //     for (int i = 0; i < N; i++) {
+    //         Bin a;
+    //         if (deQueue(&q, &a)) {
+    //             pid_t cpid = fork();
+    //             if (cpid == 0) {
+    //                 mysystem(a.ficheiro, argv[1]);
+    //                 _exit(0);
+    //             } else if (cpid > 0) {
+    //                 free(a.ficheiro);
+    //             }
+    //         }
+    //     }
+    //     int status;
+    //     while (wait(&status) > 0) {
+    //         // printf("child returned: %d\n", WEXITSTATUS(status));
+    //     }
+    // }
 
     freeQueue(&q);
 }
