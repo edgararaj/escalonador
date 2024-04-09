@@ -7,16 +7,9 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include "queues.h"
 
-typedef struct {
-    char* ficheiro;
-    int tempo;
-} Bin;
 
-typedef struct {
-    int ini, tam, uti;
-    Bin* args;
-} Queue;
 
 char* get_output_path(const char* output_folder)
 {
@@ -66,66 +59,6 @@ int mysystem(const char* command, const char* output_folder)
     _exit(-1);
 }
 
-void initQueue(Queue* q)
-{
-    q->ini = q->uti = 0;
-    q->tam = 1;
-    q->args = malloc(sizeof(Bin) * q->tam);
-}
-
-void freeQueue(Queue* q)
-{
-    for (int i = 0; i < q->uti; i++) {
-        free(q->args[i].ficheiro);
-    }
-    free(q->args);
-}
-
-void reallocQueue(Queue* q)
-{
-    Bin* novo = malloc(sizeof(Bin) * q->tam * 2);
-    int i, j;
-    for (j = 0, i = q->ini; j < q->uti; j++, i++) {
-        novo[j].tempo = q->args[i].tempo;
-        novo[j].ficheiro = q->args[i].ficheiro;
-        q->args[i].ficheiro = NULL;
-    }
-    free(q->args);
-    q->args = novo;
-    q->ini = 0;
-    q->tam *= 2;
-}
-
-void inQueue(char* ficheiro, int tempo, Queue* q)
-{
-    if (q->tam == q->uti) {
-        reallocQueue(q);
-    }
-    int pos = (q->ini + q->uti) % q->tam;
-
-    q->args[pos].ficheiro = strdup(ficheiro);
-    q->args[pos].tempo = tempo;
-
-    q->uti++;
-}
-
-int deQueue(Queue* q, Bin* a)
-{
-    int i = 0;
-    if (q->uti > 0) {
-        int pos = q->ini;
-
-        a->ficheiro = q->args[pos].ficheiro;
-        q->args[pos].ficheiro = NULL;
-        a->tempo = q->args[pos].tempo;
-
-        i = 1;
-        q->ini = (q->ini + 1) % q->tam;
-        q->uti--;
-    }
-    return i;
-}
-
 int main(int argc, char* argv[])
 {
     if (argc < 2) {
@@ -141,14 +74,14 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    Queue q;
-    initQueue(&q);
+    MinHeap q;
+    initMinHeap(&q);
 
     // Populate the queue with tasks
-    inQueue("test/hello 4", 10, &q);
-    inQueue("test/void 3", 10, &q);
-    inQueue("test/hello 2", 10, &q);
-    inQueue("test/void 1", 10, &q);
+    insert("test/hello 4", 10, &q);
+    insert("test/void 3", 10, &q);
+    insert("test/hello 2", 10, &q);
+    insert("test/void 1", 10, &q);
 
     // Parallel execution
     int N = atoi(argv[2]); // Number of parallel tasks
@@ -156,19 +89,22 @@ int main(int argc, char* argv[])
     char* cmds[N]; // Array to store commands
     int i = 0;
 
-    while (q.uti) {
+    while (q.used) {
         Bin a;
-        if (deQueue(&q, &a)) {
+
+        if (removeMin(&q, &a)) {
+            
             pid_t cpid = fork();
+
             if (cpid == 0) {
                 // Child process
-                mysystem(a.ficheiro, argv[1]);
+                mysystem(a.file, argv[1]);
                 _exit(0);
             } else if (cpid > 0) {
                 // Parent process
                 pids[i] = cpid; // Store child process ID
-                cmds[i] = a.ficheiro; // Store command
-                printf("PID %d: %s %d\n", cpid, a.ficheiro, i + 1);
+                cmds[i] = a.file; // Store command
+                printf("PID %d: %s %d\n", cpid, a.file, i + 1);
             }
             i++;
         }
@@ -198,6 +134,6 @@ int main(int argc, char* argv[])
         printf("PID %d: Terminou após %jd.%03ld seg\n", rpid, (intmax_t)(ts_end.tv_sec - ts_start.tv_sec), (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000);
     }
 
-    freeQueue(&q);
+    freeMinHeap(&q);
     return 0;
 }
