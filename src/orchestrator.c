@@ -48,50 +48,22 @@ int mysystem(const char* command, const char* output_folder)
     }
     exec_args[i] = NULL;
 
-    pid_t cpid = fork();
-    if (cpid == 0) {
-        int mystdout;
-        // criar ficheiro de output
-        {
-            char* path = get_output_path(output_folder);
-            mystdout = open(path, O_CREAT | O_WRONLY, 0644);
-            free(path);
-        }
-
-        close(1); /* Close original stdout */
-        dup2(mystdout, 1); /* Move mystdout to FD 1 */
-        close(2); /* Close original stderr */
-        dup2(mystdout, 2); /* Move mystdout to FD 2 */
-
-        execvp(exec_args[0], exec_args);
-
-        _exit(-1);
-    } else if (cpid > 0) {
-        struct timespec ts_start, ts_end;
-        int status;
-
-        if (clock_gettime(CLOCK_MONOTONIC, &ts_start) == -1) {
-            perror("clock_gettime");
-            exit(EXIT_FAILURE);
-        }
-
-        printf("PID %d: %s\n", cpid, command);
-        if (wait(&status) > 0) {
-            if (WIFEXITED(status) && WEXITSTATUS(status) != 255) {
-                res = WEXITSTATUS(status);
-            }
-        }
-
-        if (clock_gettime(CLOCK_MONOTONIC, &ts_end) == -1) {
-            perror("clock_gettime");
-            exit(EXIT_FAILURE);
-        }
-        printf("PID %d: Terminou após %jd.%03ld seg\n", cpid, (intmax_t)(ts_end.tv_sec - ts_start.tv_sec), (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000);
+    int mystdout;
+    // criar ficheiro de output
+    {
+        char* path = get_output_path(output_folder);
+        mystdout = open(path, O_CREAT | O_WRONLY, 0644);
+        free(path);
     }
 
-    free(tofree);
+    close(1); /* Close original stdout */
+    dup2(mystdout, 1); /* Move mystdout to FD 1 */
+    close(2); /* Close original stderr */
+    dup2(mystdout, 2); /* Move mystdout to FD 2 */
 
-    return res;
+    execvp(exec_args[0], exec_args);
+
+    _exit(-1);
 }
 
 void initQueue(Queue* q)
@@ -172,39 +144,60 @@ int main(int argc, char* argv[])
     Queue q;
     initQueue(&q);
 
-    inQueue("test/hello 1", 10, &q);
-    inQueue("test/void 2", 10, &q);
-    inQueue("test/hello 3", 10, &q);
-    inQueue("test/void 4", 10, &q);
+    // Populate the queue with tasks
+    inQueue("test/hello 4", 10, &q);
+    inQueue("test/void 3", 10, &q);
+    inQueue("test/hello 2", 10, &q);
+    inQueue("test/void 1", 10, &q);
 
-    // // sequential execution
-    Bin a;
-    while (deQueue(&q, &a)) {
-        mysystem(a.ficheiro, argv[1]);
-        printf("------\n");
+    // Parallel execution
+    int N = atoi(argv[2]); // Number of parallel tasks
+    pid_t pids[N]; // Array to store child process IDs
+    char* cmds[N]; // Array to store commands
+    int i = 0;
+
+    while (q.uti) {
+        Bin a;
+        if (deQueue(&q, &a)) {
+            pid_t cpid = fork();
+            if (cpid == 0) {
+                // Child process
+                mysystem(a.ficheiro, argv[1]);
+                _exit(0);
+            } else if (cpid > 0) {
+                // Parent process
+                pids[i] = cpid; // Store child process ID
+                cmds[i] = a.ficheiro; // Store command
+                printf("PID %d: %s %d\n", cpid, a.ficheiro, i + 1);
+            }
+            i++;
+        }
+    }
+    struct timespec ts_start, ts_end;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts_start) == -1) {
+        perror("clock_gettime");
+        exit(EXIT_FAILURE);
     }
 
-    // // parallel execution
-    // int N = 6;
+    // Wait for all child processes to finish
+    while (1) {
+        int status;
 
-    // while (q.uti) {
-    //     for (int i = 0; i < N; i++) {
-    //         Bin a;
-    //         if (deQueue(&q, &a)) {
-    //             pid_t cpid = fork();
-    //             if (cpid == 0) {
-    //                 mysystem(a.ficheiro, argv[1]);
-    //                 _exit(0);
-    //             } else if (cpid > 0) {
-    //                 free(a.ficheiro);
-    //             }
-    //         }
-    //     }
-    //     int status;
-    //     while (wait(&status) > 0) {
-    //         // printf("child returned: %d\n", WEXITSTATUS(status));
-    //     }
-    // }
+        int rpid = waitpid(-1, &status, 0);
+
+        if (rpid == -1) {
+            break;
+        }
+
+        if (clock_gettime(CLOCK_MONOTONIC, &ts_end) == -1) {
+            perror("clock_gettime");
+            exit(EXIT_FAILURE);
+        }
+
+        printf("PID %d: Terminou após %jd.%03ld seg\n", rpid, (intmax_t)(ts_end.tv_sec - ts_start.tv_sec), (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000);
+    }
 
     freeQueue(&q);
+    return 0;
 }
