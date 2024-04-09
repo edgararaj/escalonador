@@ -3,10 +3,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "orchestrator.h"
 
 typedef struct {
     char* ficheiro;
@@ -172,17 +175,30 @@ int main(int argc, char* argv[])
     Queue q;
     initQueue(&q);
 
-    inQueue("test/hello 1", 10, &q);
-    inQueue("test/void 2", 10, &q);
-    inQueue("test/hello 3", 10, &q);
-    inQueue("test/void 4", 10, &q);
+    mkfifo(TASK_FIFO, 0644);
+
+    int fd = open(TASK_FIFO, O_RDONLY);
+    printf("fifo opened for reading\n");
+    Task t;
+    while (1) {
+        if (read(fd, &t, sizeof(Task)) > 0) {
+            inQueue(t.command, t.time, &q);
+            Bin a;
+            if (deQueue(&q, &a)) {
+                mysystem(a.ficheiro, argv[1]);
+                printf("------\n");
+            }
+        }
+    }
+
+    close(fd);
 
     // // sequential execution
-    Bin a;
-    while (deQueue(&q, &a)) {
-        mysystem(a.ficheiro, argv[1]);
-        printf("------\n");
-    }
+    // Bin a;
+    // while (deQueue(&q, &a)) {
+    //     mysystem(a.ficheiro, argv[1]);
+    //     printf("------\n");
+    // }
 
     // // parallel execution
     // int N = 6;
