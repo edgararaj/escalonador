@@ -8,6 +8,9 @@
 #include <time.h>
 #include <unistd.h>
 
+#define NANOSECONDS_IN_SECOND 1000000000L
+#define NANOSECONDS_IN_MILLISECOND 1000000L
+
 typedef struct {
     char* ficheiro;
     int tempo;
@@ -18,13 +21,26 @@ typedef struct {
     Bin* args;
 } Queue;
 
+char* get_tmp_filepath(const char* output_folder, const char* file)
+{
+    // create path to output file consisting of <output_folder>/<file>
+    // calculate length of <file>
+    int len = snprintf(NULL, 0, "%s/%s", output_folder, file);
+    char* path = malloc(len);
+
+    // A terminating null character is automatically appended after the content written.
+    sprintf(path, "%s/%s", output_folder, file);
+
+    return path;
+}
+
 char* get_output_path(const char* output_folder)
 {
     int pid = getpid();
     // create path to output file consisting of <output_folder>/<pid>.txt
-    // calculate length of pid
-    int pid_len = snprintf(NULL, 0, "%d", pid);
-    char* path = malloc(strlen(output_folder) + pid_len + 5);
+    // calculate length of <pid>
+    int len = snprintf(NULL, 0, "%s/%d.txt", output_folder, pid);
+    char* path = malloc(len);
 
     // A terminating null character is automatically appended after the content written.
     sprintf(path, "%s/%d.txt", output_folder, pid);
@@ -128,7 +144,7 @@ int deQueue(Queue* q, Bin* a)
 
 int main(int argc, char* argv[])
 {
-    if (argc < 2) {
+    if (argc < 3) {
         printf("Uso: %s <output_folder> <parallel-tasks> <sched-policy>\n", argv[0]);
         printf("Argumentos:\n");
         printf("\toutput-folder: pasta onde são guardados os ficheiros com o "
@@ -152,27 +168,10 @@ int main(int argc, char* argv[])
 
     // Parallel execution
     int N = atoi(argv[2]); // Number of parallel tasks
-    pid_t pids[N]; // Array to store child process IDs
-    char* cmds[N]; // Array to store commands
     int i = 0;
 
-    while (q.uti) {
-        Bin a;
-        if (deQueue(&q, &a)) {
-            pid_t cpid = fork();
-            if (cpid == 0) {
-                // Child process
-                mysystem(a.ficheiro, argv[1]);
-                _exit(0);
-            } else if (cpid > 0) {
-                // Parent process
-                pids[i] = cpid; // Store child process ID
-                cmds[i] = a.ficheiro; // Store command
-                printf("PID %d: %s %d\n", cpid, a.ficheiro, i + 1);
-            }
-            i++;
-        }
-    }
+    char* completed_path = get_tmp_filepath(argv[1], "completed.txt");
+
     struct timespec ts_start, ts_end;
 
     if (clock_gettime(CLOCK_MONOTONIC, &ts_start) == -1) {
@@ -180,24 +179,55 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    // Wait for all child processes to finish
     while (1) {
+        while (q.uti && i < N) {
+            Bin a;
+            if (deQueue(&q, &a)) {
+                pid_t cpid = fork();
+                if (cpid == 0) {
+                    mysystem(a.ficheiro, argv[1]);
+                    _exit(0);
+                } else if (cpid > 0) {
+                    printf("PID %d: %s (%d)\n", cpid, a.ficheiro, i + 1);
+                    i++;
+                }
+            }
+        }
+
         int status;
-
         int rpid = waitpid(-1, &status, 0);
-
         if (rpid == -1) {
             break;
         }
+
+        i--;
 
         if (clock_gettime(CLOCK_MONOTONIC, &ts_end) == -1) {
             perror("clock_gettime");
             exit(EXIT_FAILURE);
         }
 
-        printf("PID %d: Terminou após %jd.%03ld seg\n", rpid, (intmax_t)(ts_end.tv_sec - ts_start.tv_sec), (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000);
+        // Calculate time difference
+        long seconds = ts_end.tv_sec - ts_start.tv_sec;
+        long nanoseconds = ts_end.tv_nsec - ts_start.tv_nsec;
+        if (nanoseconds < 0) {
+            seconds--;
+            nanoseconds += NANOSECONDS_IN_SECOND;
+        }
+
+        // Convert nanoseconds to milliseconds
+        long milliseconds = nanoseconds / NANOSECONDS_IN_MILLISECOND;
+
+        {
+            int completed_fd = open(completed_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
+            char buf[1024];
+            sprintf(buf, "PID %d: Terminou após %ld.%03ld seg\n", rpid, seconds, milliseconds);
+            write(completed_fd, buf, strlen(buf));
+            close(completed_fd);
+        }
     }
 
+    free(completed_path);
     freeQueue(&q);
     return 0;
 }
