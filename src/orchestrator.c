@@ -7,19 +7,10 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include "queues.h"
 
 #define NANOSECONDS_IN_SECOND 1000000000L
 #define NANOSECONDS_IN_MILLISECOND 1000000L
-
-typedef struct {
-    char* ficheiro;
-    int tempo;
-} Bin;
-
-typedef struct {
-    int ini, tam, uti;
-    Bin* args;
-} Queue;
 
 char* get_tmp_filepath(const char* output_folder, const char* file)
 {
@@ -82,66 +73,6 @@ int mysystem(const char* command, const char* output_folder)
     _exit(-1);
 }
 
-void initQueue(Queue* q)
-{
-    q->ini = q->uti = 0;
-    q->tam = 1;
-    q->args = malloc(sizeof(Bin) * q->tam);
-}
-
-void freeQueue(Queue* q)
-{
-    for (int i = 0; i < q->uti; i++) {
-        free(q->args[i].ficheiro);
-    }
-    free(q->args);
-}
-
-void reallocQueue(Queue* q)
-{
-    Bin* novo = malloc(sizeof(Bin) * q->tam * 2);
-    int i, j;
-    for (j = 0, i = q->ini; j < q->uti; j++, i++) {
-        novo[j].tempo = q->args[i].tempo;
-        novo[j].ficheiro = q->args[i].ficheiro;
-        q->args[i].ficheiro = NULL;
-    }
-    free(q->args);
-    q->args = novo;
-    q->ini = 0;
-    q->tam *= 2;
-}
-
-void inQueue(char* ficheiro, int tempo, Queue* q)
-{
-    if (q->tam == q->uti) {
-        reallocQueue(q);
-    }
-    int pos = (q->ini + q->uti) % q->tam;
-
-    q->args[pos].ficheiro = strdup(ficheiro);
-    q->args[pos].tempo = tempo;
-
-    q->uti++;
-}
-
-int deQueue(Queue* q, Bin* a)
-{
-    int i = 0;
-    if (q->uti > 0) {
-        int pos = q->ini;
-
-        a->ficheiro = q->args[pos].ficheiro;
-        q->args[pos].ficheiro = NULL;
-        a->tempo = q->args[pos].tempo;
-
-        i = 1;
-        q->ini = (q->ini + 1) % q->tam;
-        q->uti--;
-    }
-    return i;
-}
-
 int main(int argc, char* argv[])
 {
     if (argc < 3) {
@@ -157,14 +88,14 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    Queue q;
-    initQueue(&q);
+    MinHeap q;
+    initMinHeap(&q);
 
     // Populate the queue with tasks
-    inQueue("test/hello 4", 10, &q);
-    inQueue("test/void 3", 10, &q);
-    inQueue("test/hello 2", 10, &q);
-    inQueue("test/void 1", 10, &q);
+    insert("test/hello 4", 4, &q);
+    insert("test/void 3", 3, &q);
+    insert("test/hello 2", 2, &q);
+    insert("test/void 1", 1, &q);
 
     // Parallel execution
     int N = atoi(argv[2]); // Number of parallel tasks
@@ -180,15 +111,15 @@ int main(int argc, char* argv[])
     }
 
     while (1) {
-        while (q.uti && i < N) {
+        while (q.used && i < N) {
             Bin a;
-            if (deQueue(&q, &a)) {
+            if (removeMin(&q, &a)) {
                 pid_t cpid = fork();
                 if (cpid == 0) {
-                    mysystem(a.ficheiro, argv[1]);
+                    mysystem(a.file, argv[1]);
                     _exit(0);
                 } else if (cpid > 0) {
-                    printf("PID %d: %s (%d)\n", cpid, a.ficheiro, i + 1);
+                    printf("PID %d: %s (%d)\n", cpid, a.file, i + 1);
                     i++;
                 }
             }
@@ -228,6 +159,6 @@ int main(int argc, char* argv[])
     }
 
     free(completed_path);
-    freeQueue(&q);
+    freeMinHeap(&q);
     return 0;
 }
