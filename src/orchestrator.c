@@ -24,6 +24,12 @@ typedef struct {
     Bin* args;
 } Queue;
 
+typedef struct {
+    int pid;
+    long seconds;
+    long milliseconds;
+} TerminationLog;
+
 char* get_tmp_filepath(const char* output_folder, const char* file)
 {
     // create path to output file consisting of <output_folder>/<file>
@@ -51,7 +57,7 @@ char* get_output_path(const char* output_folder)
     return path;
 }
 
-int mysystem(const char* command, const char* output_folder)
+int mysystem(const char* command, const char* output_folder, TerminationLog* b)
 {
     int res = -1;
 
@@ -116,16 +122,9 @@ int mysystem(const char* command, const char* output_folder)
         // Convert nanoseconds to milliseconds
         long milliseconds = nanoseconds / NANOSECONDS_IN_MILLISECOND;
 
-        {
-            char* completed_path = get_tmp_filepath("tmp", "completed.txt");
-            int completed_fd = open(completed_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
-            char buf[1024];
-            printf("PID %d: Terminou após %ld.%03ld seg\n", cpid, seconds, milliseconds);
-            sprintf(buf, "PID %d: Terminou após %ld.%03ld seg\n", cpid, seconds, milliseconds);
-            write(completed_fd, buf, strlen(buf));
-            close(completed_fd);
-            free(completed_path);
-        }
+        b->pid = cpid;
+        b->seconds = seconds;
+        b->milliseconds = milliseconds;
     }
 
     free(tofree);
@@ -211,40 +210,66 @@ int main(int argc, char* argv[])
     Queue q;
     initQueue(&q);
 
+    int N = atoi(argv[2]); // Number of parallel tasks
+    int tasks_running = 0; // Number of tasks running
+
     mkfifo(TASK_FIFO, 0644);
 
     int fd = open(TASK_FIFO, O_RDONLY);
     printf("fifo opened for reading\n");
-    Task t;
 
-    // Parallel execution
-    int N = atoi(argv[2]); // Number of parallel tasks
-    int i = 0;
+    int pipefd[2];
+    pipe(pipefd);
 
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
+
+    char* completed_path = get_tmp_filepath("tmp", "completed.txt");
 
     while (1) {
-        while (i < N) {
-            if (read(fd, &t, sizeof(Task)) > 0) {
-                inQueue(t.command, t.time, &q);
+        Task t;
+        if (read(fd, &t, sizeof(Task)) > 0) {
+            inQueue(t.command, t.time, &q);
+        }
+
+        TerminationLog b;
+        if (read(pipefd[0], &b, sizeof(TerminationLog)) > 0) {
+            {
+                int completed_fd = open(completed_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
+                char buf[1024];
+                printf("PID %d: Terminou após %ld.%03ld seg\n", b.pid, b.seconds, b.milliseconds);
+                sprintf(buf, "PID %d: Terminou após %ld.%03ld seg\n", b.pid, b.seconds, b.milliseconds);
+                write(completed_fd, buf, strlen(buf));
+                close(completed_fd);
             }
-            if (q.uti) {
-                Bin a;
-                if (deQueue(&q, &a)) {
-                    pid_t cpid = fork();
-                    if (cpid == 0) {
-                        mysystem(a.ficheiro, argv[1]);
-                        _exit(0);
-                    } else if (cpid > 0) {
-                        free(a.ficheiro);
-                        i++;
-                    }
+            tasks_running--;
+        }
+
+        while (tasks_running < N && q.uti) {
+            Bin a;
+            if (deQueue(&q, &a)) {
+                pid_t cpid = fork();
+                if (cpid == 0) {
+                    // close read end of pipe
+                    close(pipefd[0]);
+
+                    TerminationLog b;
+                    // write to pipe
+                    mysystem(a.ficheiro, argv[1], &b);
+
+                    write(pipefd[1], &b, sizeof(TerminationLog));
+
+                    _exit(0);
+                } else if (cpid > 0) {
+                    free(a.ficheiro);
+                    tasks_running++;
                 }
             }
         }
     }
 
+    free(completed_path);
     freeQueue(&q);
     return 0;
 }
