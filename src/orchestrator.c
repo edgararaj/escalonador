@@ -1,3 +1,4 @@
+#include "queues.h"
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -7,7 +8,6 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include "queues.h"
 
 #define NANOSECONDS_IN_SECOND 1000000000L
 #define NANOSECONDS_IN_MILLISECOND 1000000L
@@ -28,48 +28,38 @@ char* get_tmp_filepath(const char* output_folder, const char* file)
 char* get_output_path(const char* output_folder)
 {
     int pid = getpid();
-    // create path to output file consisting of <output_folder>/<pid>.txt
-    // calculate length of <pid>
-    int len = snprintf(NULL, 0, "%s/%d.txt", output_folder, pid);
-    char* path = malloc(len);
-
-    // A terminating null character is automatically appended after the content written.
+    int pid_len = snprintf(NULL, 0, "%d", pid);
+    char* path = malloc(strlen(output_folder) + pid_len + 5);
     sprintf(path, "%s/%d.txt", output_folder, pid);
-
     return path;
 }
 
 int mysystem(const char* command, const char* output_folder)
 {
-    int res = -1;
-
-    // Estamos a assumir numero maximo de argumentos
-    // isto teria de ser melhorado com realloc por exemplo
     char* exec_args[20];
     char *string, *cmd, *tofree;
     int i = 0;
     tofree = cmd = strdup(command);
     while ((string = strsep(&cmd, " ")) != NULL) {
-        exec_args[i] = string;
-        i++;
+        exec_args[i++] = string;
     }
     exec_args[i] = NULL;
 
     int mystdout;
-    // criar ficheiro de output
-    {
-        char* path = get_output_path(output_folder);
-        mystdout = open(path, O_CREAT | O_WRONLY, 0644);
-        free(path);
-    }
+    char* path = get_output_path(output_folder);
+    mystdout = open(path, O_CREAT | O_WRONLY, 0644);
+    free(path); // Free allocated path
 
-    close(1); /* Close original stdout */
-    dup2(mystdout, 1); /* Move mystdout to FD 1 */
-    close(2); /* Close original stderr */
-    dup2(mystdout, 2); /* Move mystdout to FD 2 */
+    close(1); // Close original stdout
+    dup2(mystdout, 1); // Duplicate mystdout to stdout
+    close(2); // Close original stderr
+    dup2(mystdout, 2); // Duplicate mystdout to stderr
+    close(mystdout); // Close the original file descriptor
 
     execvp(exec_args[0], exec_args);
 
+    // Free allocated command and exec_args before exiting
+    free(tofree);
     _exit(-1);
 }
 
@@ -77,14 +67,6 @@ int main(int argc, char* argv[])
 {
     if (argc < 3) {
         printf("Uso: %s <output_folder> <parallel-tasks> <sched-policy>\n", argv[0]);
-        printf("Argumentos:\n");
-        printf("\toutput-folder: pasta onde são guardados os ficheiros com o "
-               "output de tarefas executadas.\n");
-        printf("\tparallel-tasks: número de tarefas que podem ser executadas em "
-               "paralelo.\n");
-        printf("\tsched-policy: identificador da política de escalonamento, caso o "
-               "servidor suporte várias políticas.\n");
-
         return 1;
     }
 
@@ -97,8 +79,12 @@ int main(int argc, char* argv[])
     insert("test/hello 2", 2, &q);
     insert("test/void 1", 1, &q);
 
-    // Parallel execution
     int N = atoi(argv[2]); // Number of parallel tasks
+    if (N <= 0) {
+        printf("Number of parallel tasks must be greater than 0.\n");
+        freeMinHeap(&q);
+        return 1;
+    }
     int i = 0;
 
     char* completed_path = get_tmp_filepath(argv[1], "completed.txt");
@@ -117,9 +103,11 @@ int main(int argc, char* argv[])
                 pid_t cpid = fork();
                 if (cpid == 0) {
                     mysystem(a.file, argv[1]);
+                    free(a.file); // Free the command string in child process
                     _exit(0);
                 } else if (cpid > 0) {
                     printf("PID %d: %s (%d)\n", cpid, a.file, i + 1);
+                    free(a.file); // Free the command string in child process
                     i++;
                 }
             }

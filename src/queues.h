@@ -3,8 +3,7 @@ typedef struct {
     int time;
 } Bin;
 
-
-//Queue
+// Queue
 typedef struct {
     int ini, size, used;
     Bin* args;
@@ -16,16 +15,16 @@ void reallocQueue(Queue* q);
 int deQueue(Queue* q, Bin* a);
 void freeQueue(Queue* q);
 
-//Min-Heap
+// Min-Heap
 
 typedef struct {
     int size, used;
-    Bin *args;
-}MinHeap;
+    Bin* args;
+} MinHeap;
 
 void initMinHeap(MinHeap* m);
 void insert(char* file, int time, MinHeap* m);
-int removeMin(MinHeap* m, Bin *a);
+int removeMin(MinHeap* m, Bin* a);
 void bubbleUp(MinHeap* m, int i);
 void bubbleDown(MinHeap* m, int i);
 void freeMinHeap(MinHeap* m);
