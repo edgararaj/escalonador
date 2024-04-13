@@ -1,3 +1,4 @@
+#include "queues.h"
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,16 +14,6 @@
 
 #define NANOSECONDS_IN_SECOND 1000000000L
 #define NANOSECONDS_IN_MILLISECOND 1000000L
-
-typedef struct {
-    char* ficheiro;
-    int tempo;
-} Bin;
-
-typedef struct {
-    int ini, tam, uti;
-    Bin* args;
-} Queue;
 
 char* get_client_callback_filepath_by_pid(int pid)
 {
@@ -53,14 +44,9 @@ char* get_tmp_filepath(const char* output_folder, const char* file)
 char* get_output_path(const char* output_folder)
 {
     int pid = getpid();
-    // create path to output file consisting of <output_folder>/<pid>.txt
-    // calculate length of <pid>
-    int len = snprintf(NULL, 0, "%s/%d.txt", output_folder, pid);
-    char* path = malloc(len);
-
-    // A terminating null character is automatically appended after the content written.
+    int pid_len = snprintf(NULL, 0, "%d", pid);
+    char* path = malloc(strlen(output_folder) + pid_len + 5);
     sprintf(path, "%s/%d.txt", output_folder, pid);
-
     return path;
 }
 
@@ -68,15 +54,12 @@ int mysystem(const char* command, const char* output_folder, Msg* b)
 {
     int res = -1;
 
-    // Estamos a assumir numero maximo de argumentos
-    // isto teria de ser melhorado com realloc por exemplo
     char* exec_args[20];
     char *string, *cmd, *tofree;
     int i = 0;
     tofree = cmd = strdup(command);
     while ((string = strsep(&cmd, " ")) != NULL) {
-        exec_args[i] = string;
-        i++;
+        exec_args[i++] = string;
     }
     exec_args[i] = NULL;
 
@@ -139,66 +122,6 @@ int mysystem(const char* command, const char* output_folder, Msg* b)
     return res;
 }
 
-void initQueue(Queue* q)
-{
-    q->ini = q->uti = 0;
-    q->tam = 1;
-    q->args = malloc(sizeof(Bin) * q->tam);
-}
-
-void freeQueue(Queue* q)
-{
-    for (int i = 0; i < q->uti; i++) {
-        free(q->args[i].ficheiro);
-    }
-    free(q->args);
-}
-
-void reallocQueue(Queue* q)
-{
-    Bin* novo = malloc(sizeof(Bin) * q->tam * 2);
-    int i, j;
-    for (j = 0, i = q->ini; j < q->uti; j++, i++) {
-        novo[j].tempo = q->args[i].tempo;
-        novo[j].ficheiro = q->args[i].ficheiro;
-        q->args[i].ficheiro = NULL;
-    }
-    free(q->args);
-    q->args = novo;
-    q->ini = 0;
-    q->tam *= 2;
-}
-
-void inQueue(char* ficheiro, int tempo, Queue* q)
-{
-    if (q->tam == q->uti) {
-        reallocQueue(q);
-    }
-    int pos = (q->ini + q->uti) % q->tam;
-
-    q->args[pos].ficheiro = strdup(ficheiro);
-    q->args[pos].tempo = tempo;
-
-    q->uti++;
-}
-
-int deQueue(Queue* q, Bin* a)
-{
-    int i = 0;
-    if (q->uti > 0) {
-        int pos = q->ini;
-
-        a->ficheiro = q->args[pos].ficheiro;
-        q->args[pos].ficheiro = NULL;
-        a->tempo = q->args[pos].tempo;
-
-        i = 1;
-        q->ini = (q->ini + 1) % q->tam;
-        q->uti--;
-    }
-    return i;
-}
-
 int main(int argc, char* argv[])
 {
     if (argc < 3) {
@@ -210,14 +133,18 @@ int main(int argc, char* argv[])
                "paralelo.\n");
         printf("\tsched-policy: identificador da política de escalonamento, caso o "
                "servidor suporte várias políticas.\n");
-
         return 1;
     }
 
-    Queue q;
-    initQueue(&q);
+    MinHeap q;
+    initMinHeap(&q);
 
     int N = atoi(argv[2]); // Number of parallel tasks
+    if (N <= 0) {
+        printf("Number of parallel tasks must be greater than 0.\n");
+        freeMinHeap(&q);
+        return 1;
+    }
     int tasks_running = 0; // Number of tasks running
 
     mkfifo(TASK_FIFO, 0644);
@@ -235,7 +162,7 @@ int main(int argc, char* argv[])
         case PIPELINE:
             // Message from client
             {
-                inQueue(t.command, t.time, &q);
+                insert(t.command, t.time, &q);
 
                 {
                     int callback_fd;
@@ -268,20 +195,21 @@ int main(int argc, char* argv[])
             break;
         }
 
-        while (tasks_running < N && q.uti) {
+        while (tasks_running < N && q.used) {
             Bin a;
-            if (deQueue(&q, &a)) {
+            if (removeMin(&q, &a)) {
                 pid_t cpid = fork();
                 if (cpid == 0) {
 
                     Msg b;
-                    mysystem(a.ficheiro, argv[1], &b);
+                    mysystem(a.file, argv[1], &b);
                     write(wfd, &b, sizeof(Msg));
                     // printf("Sent msg, type: %d, pid: %d, time: %d\n", b.type, b.pid, b.time);
 
+                    free(a.file);
                     _exit(0);
                 } else if (cpid > 0) {
-                    free(a.ficheiro);
+                    free(a.file);
                     tasks_running++;
                 }
             }
@@ -289,6 +217,6 @@ int main(int argc, char* argv[])
     }
 
     free(completed_path);
-    freeQueue(&q);
+    freeMinHeap(&q);
     return 0;
 }
