@@ -10,6 +10,7 @@ typedef enum {
 #define TASK_FIFO "/tmp/escalonador"
 
 typedef struct {
+    int client_pid;
     int time;
     char command[TASK_COMMAND_SIZE];
     Type type;

@@ -8,6 +8,19 @@
 
 #include "orchestrator.h"
 
+char* get_callback_filepath()
+{
+    // create path to output file consisting of <output_folder>/<file>
+    // calculate length of <file>
+    int len = snprintf(NULL, 0, "/tmp/escalonador_%d", getpid());
+    char* path = malloc(len);
+
+    // A terminating null character is automatically appended after the content written.
+    sprintf(path, "/tmp/escalonador_%d", getpid());
+
+    return path;
+}
+
 int main(int argc, char* argv[])
 {
     if (argc > 1 && strcmp(argv[1], "status") == 0) {
@@ -22,18 +35,28 @@ int main(int argc, char* argv[])
             printf("Time: %d, Command: %s\n", time, cmd);
 
             mkfifo(TASK_FIFO, 0644);
+            char* callback_fifo = get_callback_filepath();
+            mkfifo(callback_fifo, 0644);
 
             int fd = open(TASK_FIFO, O_WRONLY);
-            printf("fifo opened for writing\n");
-
             Task t;
             t.time = time;
+            t.client_pid = getpid();
             strncpy(t.command, cmd, TASK_COMMAND_SIZE);
             t.type = SINGLE;
 
             write(fd, &t, sizeof(Task));
-
             close(fd);
+
+            int callback_fd = open(callback_fifo, O_RDONLY);
+            int task_pid;
+            read(callback_fd, &task_pid, sizeof(int));
+
+            printf("Task PID: %d\n", task_pid);
+
+            close(callback_fd);
+            unlink(callback_fifo);
+            free(callback_fifo);
         } else if (strcmp(argv[3], "-p") == 0) {
             printf("Pipe execution\n");
         } else {

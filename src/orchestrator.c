@@ -30,6 +30,19 @@ typedef struct {
     long milliseconds;
 } TerminationLog;
 
+char* get_client_callback_filepath_by_pid(int pid)
+{
+    // create path to output file consisting of <output_folder>/<file>
+    // calculate length of <file>
+    int len = snprintf(NULL, 0, "/tmp/escalonador_%d", pid);
+    char* path = malloc(len);
+
+    // A terminating null character is automatically appended after the content written.
+    sprintf(path, "/tmp/escalonador_%d", pid);
+
+    return path;
+}
+
 char* get_tmp_filepath(const char* output_folder, const char* file)
 {
     // create path to output file consisting of <output_folder>/<file>
@@ -231,6 +244,18 @@ int main(int argc, char* argv[])
         Task t;
         if (read(fd, &t, sizeof(Task)) > 0) {
             inQueue(t.command, t.time, &q);
+
+            {
+                int callback_fd;
+                char* callback_fifo = get_client_callback_filepath_by_pid(t.client_pid);
+                callback_fd = open(callback_fifo, O_WRONLY);
+
+                int task_id = 1;
+                write(callback_fd, &task_id, sizeof(int));
+
+                free(callback_fifo);
+                close(callback_fd);
+            }
         }
 
         TerminationLog b;
