@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include "orchestrator.h"
+#include "status.h"
 
 char* get_callback_filepath()
 {
@@ -24,7 +25,50 @@ char* get_callback_filepath()
 int main(int argc, char* argv[])
 {
     if (argc > 1 && strcmp(argv[1], "status") == 0) {
-        printf("Status\n");
+        mkfifo(TASK_FIFO, 0644);
+        char* callback_fifo = get_callback_filepath();
+        mkfifo(callback_fifo, 0644);
+
+        int fd = open(TASK_FIFO, O_WRONLY);
+
+        Msg t;
+        t.pid = getpid();
+        t.type = STATUS;
+
+        write(fd, &t, sizeof(Msg));
+        close(fd);
+
+        int callback_fd = open(callback_fifo, O_RDONLY);
+        struct s task;
+        int prev_sts = STS_UNKNOWN;
+        while (read(callback_fd, &task, sizeof(struct s)) > 0) {
+            if (task.status != prev_sts) {
+                switch (task.status) {
+                case STS_SCHEDULED:
+                    printf("Scheduled:\n");
+                    break;
+                case STS_EXECUTING:
+                    printf("Executing:\n");
+                    break;
+                case STS_TERMINATED:
+                    printf("Terminated:\n");
+                    break;
+                default:
+                    break;
+                }
+                prev_sts = task.status;
+            }
+            if (task.status == STS_TERMINATED) {
+                printf("%d: %s (%dms)\n", task.id, task.file, task.time);
+            } else {
+                printf("%d: %s\n", task.id, task.file);
+            }
+        }
+
+        close(callback_fd);
+        unlink(callback_fifo);
+        free(callback_fifo);
+
     } else if (argc > 4 && strcmp(argv[1], "execute") == 0) {
         if (strcmp(argv[3], "-u") == 0) {
             printf("Single execution\n");

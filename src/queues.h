@@ -1,6 +1,10 @@
+#ifndef QUEUES_H
+#define QUEUES_H
+
+// precisa do id
 typedef struct {
     char* file;
-    int time;
+    int time, id;
 } Bin;
 
 // Queue
@@ -23,8 +27,10 @@ typedef struct {
 } MinHeap;
 
 void initMinHeap(MinHeap* m);
-void insert(char* file, int time, MinHeap* m);
+Bin insert(MinHeap* m, Bin a);
 int removeMin(MinHeap* m, Bin* a);
 void bubbleUp(MinHeap* m, int i);
 void bubbleDown(MinHeap* m, int i);
 void freeMinHeap(MinHeap* m);
+
+#endif

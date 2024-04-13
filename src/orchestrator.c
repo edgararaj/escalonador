@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "orchestrator.h"
+#include "status.h"
 
 #define NANOSECONDS_IN_SECOND 1000000000L
 #define NANOSECONDS_IN_MILLISECOND 1000000L
@@ -50,7 +51,7 @@ char* get_output_path(const char* output_folder)
     return path;
 }
 
-int mysystem(const char* command, const char* output_folder, Msg* b)
+int mysystem(const char* command, const char* output_folder, int* time)
 {
     int res = -1;
 
@@ -90,7 +91,6 @@ int mysystem(const char* command, const char* output_folder, Msg* b)
             exit(EXIT_FAILURE);
         }
 
-        printf("PID %d: %s\n", cpid, command);
         if (wait(&status) > 0) {
             if (WIFEXITED(status) && WEXITSTATUS(status) != 255) {
                 res = WEXITSTATUS(status);
@@ -112,9 +112,7 @@ int mysystem(const char* command, const char* output_folder, Msg* b)
         // Convert nanoseconds to milliseconds
         long milliseconds = nanoseconds / NANOSECONDS_IN_MILLISECOND;
 
-        b->type = TERMINATED;
-        b->pid = cpid;
-        b->time = seconds * 1000 + milliseconds;
+        *time = seconds * 1000 + milliseconds;
     }
 
     free(tofree);
@@ -139,6 +137,9 @@ int main(int argc, char* argv[])
     MinHeap q;
     initMinHeap(&q);
 
+    Status s;
+    initStatus(s);
+
     int N = atoi(argv[2]); // Number of parallel tasks
     if (N <= 0) {
         printf("Number of parallel tasks must be greater than 0.\n");
@@ -152,57 +153,83 @@ int main(int argc, char* argv[])
     int fd = open(TASK_FIFO, O_RDONLY);
     int wfd = open(TASK_FIFO, O_WRONLY);
 
-    char* completed_path = get_tmp_filepath("tmp", "completed.txt");
+    char* completed_path = get_tmp_filepath(argv[1], "completed.txt");
+
+    int task_id = 0;
 
     Msg t;
     while (read(fd, &t, sizeof(Msg)) > 0) {
         // printf("Received msg, type: %d, pid: %d, time: %d, command: %s\n", t.type, t.pid, t.time, t.command);
         switch (t.type) {
+        // Messages from client
+        case STATUS: {
+            {
+                int callback_fd;
+                char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
+                callback_fd = open(callback_fifo, O_WRONLY);
+
+                returnStatus(s, callback_fd);
+
+                free(callback_fifo);
+                close(callback_fd);
+            }
+        } break;
         case SINGLE:
-        case PIPELINE:
-            // Message from client
+        case PIPELINE: {
+            Bin bin;
+            bin.time = t.time;
+            bin.file = t.command;
+            bin.id = task_id++;
+            insert(&q, bin);
+            schedTask(s, bin);
+
             {
-                insert(t.command, t.time, &q);
+                int callback_fd;
+                char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
+                callback_fd = open(callback_fifo, O_WRONLY);
 
-                {
-                    int callback_fd;
-                    char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
-                    callback_fd = open(callback_fifo, O_WRONLY);
+                int task_id = bin.id;
+                write(callback_fd, &task_id, sizeof(int));
 
-                    int task_id = 1;
-                    write(callback_fd, &task_id, sizeof(int));
-
-                    free(callback_fifo);
-                    close(callback_fd);
-                }
+                free(callback_fifo);
+                close(callback_fd);
             }
-            break;
-        case TERMINATED:
-            // Message from server
+        } break;
+        // Messages from server
+        case TERMINATED: {
+            waitpid(t.pid, NULL, 0);
             {
-                {
-                    int completed_fd = open(completed_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
-                    char buf[1024];
-                    int seconds = t.time / 1000;
-                    int milliseconds = t.time % 1000;
-                    printf("PID %d: Terminou após %d.%03d seg\n", t.pid, seconds, milliseconds);
-                    sprintf(buf, "PID %d: Terminou após %d.%03d seg\n", t.pid, seconds, milliseconds);
-                    write(completed_fd, buf, strlen(buf));
-                    close(completed_fd);
-                }
-                tasks_running--;
+                int completed_fd = open(completed_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
+                char buf[1024];
+                int seconds = t.time / 1000;
+                int milliseconds = t.time % 1000;
+                printf("PID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
+                sprintf(buf, "PID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
+                write(completed_fd, buf, strlen(buf));
+                close(completed_fd);
             }
-            break;
+            Bin b;
+            b.id = t.id;
+            b.time = t.time;
+
+            terminateTask(s, b);
+            tasks_running--;
+        } break;
         }
 
         while (tasks_running < N && q.used) {
             Bin a;
             if (removeMin(&q, &a)) {
+                execTask(s, a);
                 pid_t cpid = fork();
                 if (cpid == 0) {
 
                     Msg b;
-                    mysystem(a.file, argv[1], &b);
+                    printf("PID %d: %s\n", a.id, a.file);
+                    mysystem(a.file, argv[1], &b.time);
+                    b.type = TERMINATED;
+                    b.pid = getpid();
+                    b.id = a.id;
                     write(wfd, &b, sizeof(Msg));
                     // printf("Sent msg, type: %d, pid: %d, time: %d\n", b.type, b.pid, b.time);
 
@@ -217,6 +244,8 @@ int main(int argc, char* argv[])
     }
 
     free(completed_path);
+
+    freeStatus(s);
     freeMinHeap(&q);
     return 0;
 }

@@ -1,6 +1,6 @@
 #include "queues.h"
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 void initQueue(Queue* q)
 {
@@ -65,18 +65,23 @@ void initMinHeap(MinHeap* m)
     m->used = 0;
     m->args = malloc(sizeof(Bin) * m->size);
 }
-void insert(char* file, int time, MinHeap* m)
+
+Bin insert(MinHeap* m, Bin b)
 {
     if (m->size == m->used) {
         m->size *= 2;
         // falta verificar o realloc...
         m->args = realloc(m->args, sizeof(Bin) * m->size);
     }
-    m->args[m->used].time = time;
-    m->args[m->used].file = strdup(file);
+
+    m->args[m->used].time = b.time;
+    m->args[m->used].file = strdup(b.file);
+    m->args[m->used].id = b.id;
 
     bubbleUp(m, m->used);
     m->used++;
+
+    return b;
 }
 
 void bubbleUp(MinHeap* m, int i)
@@ -90,6 +95,9 @@ void bubbleUp(MinHeap* m, int i)
         y = m->args[i].time;
         m->args[i].time = m->args[x].time;
         m->args[x].time = y;
+        y = m->args[i].id;
+        m->args[i].id = m->args[x].id;
+        m->args[x].id = y;
         i = x;
         x = (i - 1) / 2;
     }
@@ -101,9 +109,11 @@ int removeMin(MinHeap* m, Bin* a)
     if (m->used) {
         a->file = m->args[0].file;
         a->time = m->args[0].time;
+        a->id = m->args[0].id;
         m->used--;
         m->args[0].file = m->args[m->used].file;
         m->args[0].time = m->args[m->used].time;
+        m->args[0].id = m->args[m->used].id;
         m->args[m->used].file = NULL;
         bubbleDown(m, 0);
         i = 1;
@@ -124,6 +134,19 @@ void bubbleDown(MinHeap* m, int i)
         } else {
             i = min;
             left = 2 * i + 1;
+
+            int y;
+            char* tmp;
+
+            tmp = m->args[i].file;
+            m->args[i].file = m->args[min].file;
+            m->args[min].file = tmp;
+            y = m->args[i].time;
+            m->args[i].time = m->args[min].time;
+            m->args[min].time = y;
+            y = m->args[i].id;
+            m->args[i].id = m->args[min].id;
+            m->args[min].id = y;
         }
     }
 }
