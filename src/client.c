@@ -39,13 +39,13 @@ int main(int argc, char* argv[])
             mkfifo(callback_fifo, 0644);
 
             int fd = open(TASK_FIFO, O_WRONLY);
-            Task t;
+            Msg t;
             t.time = time;
-            t.client_pid = getpid();
+            t.pid = getpid();
             strncpy(t.command, cmd, TASK_COMMAND_SIZE);
             t.type = SINGLE;
 
-            write(fd, &t, sizeof(Task));
+            write(fd, &t, sizeof(Msg));
             close(fd);
 
             int callback_fd = open(callback_fifo, O_RDONLY);

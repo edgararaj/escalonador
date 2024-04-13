@@ -24,12 +24,6 @@ typedef struct {
     Bin* args;
 } Queue;
 
-typedef struct {
-    int pid;
-    long seconds;
-    long milliseconds;
-} TerminationLog;
-
 char* get_client_callback_filepath_by_pid(int pid)
 {
     // create path to output file consisting of <output_folder>/<file>
@@ -70,7 +64,7 @@ char* get_output_path(const char* output_folder)
     return path;
 }
 
-int mysystem(const char* command, const char* output_folder, TerminationLog* b)
+int mysystem(const char* command, const char* output_folder, Msg* b)
 {
     int res = -1;
 
@@ -135,9 +129,9 @@ int mysystem(const char* command, const char* output_folder, TerminationLog* b)
         // Convert nanoseconds to milliseconds
         long milliseconds = nanoseconds / NANOSECONDS_IN_MILLISECOND;
 
+        b->type = TERMINATED;
         b->pid = cpid;
-        b->seconds = seconds;
-        b->milliseconds = milliseconds;
+        b->time = seconds * 1000 + milliseconds;
     }
 
     free(tofree);
@@ -229,46 +223,49 @@ int main(int argc, char* argv[])
     mkfifo(TASK_FIFO, 0644);
 
     int fd = open(TASK_FIFO, O_RDONLY);
-    printf("fifo opened for reading\n");
-
-    int pipefd[2];
-    pipe(pipefd);
-
-    int flags = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-    fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
+    int wfd = open(TASK_FIFO, O_WRONLY);
 
     char* completed_path = get_tmp_filepath("tmp", "completed.txt");
 
-    while (1) {
-        Task t;
-        if (read(fd, &t, sizeof(Task)) > 0) {
-            inQueue(t.command, t.time, &q);
-
+    Msg t;
+    while (read(fd, &t, sizeof(Msg)) > 0) {
+        // printf("Received msg, type: %d, pid: %d, time: %d, command: %s\n", t.type, t.pid, t.time, t.command);
+        switch (t.type) {
+        case SINGLE:
+        case PIPELINE:
+            // Message from client
             {
-                int callback_fd;
-                char* callback_fifo = get_client_callback_filepath_by_pid(t.client_pid);
-                callback_fd = open(callback_fifo, O_WRONLY);
+                inQueue(t.command, t.time, &q);
 
-                int task_id = 1;
-                write(callback_fd, &task_id, sizeof(int));
+                {
+                    int callback_fd;
+                    char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
+                    callback_fd = open(callback_fifo, O_WRONLY);
 
-                free(callback_fifo);
-                close(callback_fd);
+                    int task_id = 1;
+                    write(callback_fd, &task_id, sizeof(int));
+
+                    free(callback_fifo);
+                    close(callback_fd);
+                }
             }
-        }
-
-        TerminationLog b;
-        if (read(pipefd[0], &b, sizeof(TerminationLog)) > 0) {
+            break;
+        case TERMINATED:
+            // Message from server
             {
-                int completed_fd = open(completed_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
-                char buf[1024];
-                printf("PID %d: Terminou após %ld.%03ld seg\n", b.pid, b.seconds, b.milliseconds);
-                sprintf(buf, "PID %d: Terminou após %ld.%03ld seg\n", b.pid, b.seconds, b.milliseconds);
-                write(completed_fd, buf, strlen(buf));
-                close(completed_fd);
+                {
+                    int completed_fd = open(completed_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
+                    char buf[1024];
+                    int seconds = t.time / 1000;
+                    int milliseconds = t.time % 1000;
+                    printf("PID %d: Terminou após %d.%03d seg\n", t.pid, seconds, milliseconds);
+                    sprintf(buf, "PID %d: Terminou após %d.%03d seg\n", t.pid, seconds, milliseconds);
+                    write(completed_fd, buf, strlen(buf));
+                    close(completed_fd);
+                }
+                tasks_running--;
             }
-            tasks_running--;
+            break;
         }
 
         while (tasks_running < N && q.uti) {
@@ -276,14 +273,11 @@ int main(int argc, char* argv[])
             if (deQueue(&q, &a)) {
                 pid_t cpid = fork();
                 if (cpid == 0) {
-                    // close read end of pipe
-                    close(pipefd[0]);
 
-                    TerminationLog b;
-                    // write to pipe
+                    Msg b;
                     mysystem(a.ficheiro, argv[1], &b);
-
-                    write(pipefd[1], &b, sizeof(TerminationLog));
+                    write(wfd, &b, sizeof(Msg));
+                    // printf("Sent msg, type: %d, pid: %d, time: %d\n", b.type, b.pid, b.time);
 
                     _exit(0);
                 } else if (cpid > 0) {
