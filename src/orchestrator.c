@@ -16,6 +16,9 @@
 #define NANOSECONDS_IN_SECOND 1000000000L
 #define NANOSECONDS_IN_MILLISECOND 1000000L
 
+#define FCFS 0
+#define SJF 1
+
 char* get_client_callback_filepath_by_pid(int pid)
 {
     // create path to output file consisting of <output_folder>/<file>
@@ -134,8 +137,20 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    int scheduling_policy = FCFS;  // Default is FCFS
+    if (argc > 3) {
+        if (strcmp(argv[3], "SJF") == 0) {
+            scheduling_policy = SJF;
+        }
+    }
+
     MinHeap q;
-    initMinHeap(&q);
+    Queue queue;
+    if (scheduling_policy == SJF) {
+        initMinHeap(&q);
+    } else {
+        initQueue(&queue);
+    }
 
     Status s;
     initStatus(s);
@@ -234,7 +249,7 @@ int main(int argc, char* argv[])
         } break;
         }
 
-        while (tasks_running < N && q.used) {
+        while (tasks_running < N && (scheduling_policy == SJF ? q.used : queue.used)) {
             Bin a;
             if (removeMin(&q, &a)) {
                 execTask(s, a);
@@ -261,8 +276,12 @@ int main(int argc, char* argv[])
     }
 
     free(completed_path);
-
     freeStatus(s);
-    freeMinHeap(&q);
+    if(scheduling_policy == SJF){
+        freeMinHeap(&q);
+    } else {
+        freeQueue(&queue);
+    }
+
     return 0;
 }
