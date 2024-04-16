@@ -78,6 +78,10 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        if (prev_sts == STS_UNKNOWN) {
+            printf("No tasks\n");
+        }
+
         close(callback_fd);
         unlink(callback_fifo);
         free(callback_fifo);
@@ -105,6 +109,7 @@ int main(int argc, char* argv[]) {
             t.time = time;
             t.pid = getpid();
             strncpy(t.command, cmd, TASK_COMMAND_SIZE);
+            t.command[TASK_COMMAND_SIZE - 1] = '\0';
             t.type = SINGLE;
 
             if (write(fd, &t, sizeof(Msg)) == -1) {
@@ -127,7 +132,7 @@ int main(int argc, char* argv[]) {
                 exit(EXIT_FAILURE);
             }
 
-            printf("Task PID: %d\n", task_pid);
+            printf("Task ID: %d\n", task_pid);
 
             close(callback_fd);
             unlink(callback_fifo);

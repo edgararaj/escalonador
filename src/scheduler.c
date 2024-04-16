@@ -22,6 +22,9 @@ void reallocQueue(Queue* q)
     int i, j;
     for (j = 0, i = q->ini; j < q->used; j++) {
         new[j].file = q->args[i].file;
+        new[j].id = q->args[i].id;
+        new[j].time = q->args[i].time;
+
         q->args[i].file = NULL;
         i = (i + 1) % q->used;
     }
@@ -31,14 +34,16 @@ void reallocQueue(Queue* q)
     q->size *= 2;
 }
 
-void inQueue(char* file, int time, Queue* q)
+void inQueue(Queue* q, Bin a)
 {
     if (q->size == q->used) {
         reallocQueue(q);
     }
     int pos = (q->ini + q->used) % q->size;
 
-    q->args[pos].file = strdup(file);
+    q->args[pos].file = strdup(a.file);
+    q->args[pos].id = a.id;
+    q->args[pos].time = a.time;
 
     q->used++;
 }
@@ -50,6 +55,8 @@ int deQueue(Queue* q, Bin* a)
         int pos = q->ini;
 
         a->file = q->args[pos].file;
+        a->id = q->args[pos].id;
+        a->time = q->args[pos].id;
         q->args[pos].file = NULL;
 
         i = 1;
@@ -66,7 +73,7 @@ void initMinHeap(MinHeap* m)
     m->args = malloc(sizeof(Bin) * m->size);
 }
 
-Bin insert(MinHeap* m, Bin b)
+void insert(MinHeap* m, Bin a)
 {
     if (m->size == m->used) {
         m->size *= 2;
@@ -74,14 +81,12 @@ Bin insert(MinHeap* m, Bin b)
         m->args = realloc(m->args, sizeof(Bin) * m->size);
     }
 
-    m->args[m->used].time = b.time;
-    m->args[m->used].file = strdup(b.file);
-    m->args[m->used].id = b.id;
+    m->args[m->used].time = a.time;
+    m->args[m->used].file = strdup(a.file);
+    m->args[m->used].id = a.id;
 
     bubbleUp(m, m->used);
     m->used++;
-
-    return b;
 }
 
 void bubbleUp(MinHeap* m, int i)
@@ -98,6 +103,7 @@ void bubbleUp(MinHeap* m, int i)
         y = m->args[i].id;
         m->args[i].id = m->args[x].id;
         m->args[x].id = y;
+
         i = x;
         x = (i - 1) / 2;
     }
@@ -115,6 +121,7 @@ int removeMin(MinHeap* m, Bin* a)
         m->args[0].time = m->args[m->used].time;
         m->args[0].id = m->args[m->used].id;
         m->args[m->used].file = NULL;
+
         bubbleDown(m, 0);
         i = 1;
     }

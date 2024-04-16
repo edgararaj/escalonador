@@ -14,6 +14,9 @@
 // TERMINATED messages are sent by the server
 // pid (pid of waiter fork) | id (id of the task) | time (termination time) | command
 
+// KILL messages are sent by the server
+// pid (pid of status fork)
+
 typedef enum {
     // messages from the client
     SINGLE,
@@ -21,6 +24,7 @@ typedef enum {
     STATUS,
 
     // messages from the server to itself
+    KILL,
     TERMINATED
 } Type;
 

@@ -14,7 +14,7 @@ typedef struct {
 } Queue;
 
 void initQueue(Queue* q);
-void inQueue(char* ficheiro, int tempo, Queue* q);
+void inQueue(Queue* q, Bin a);
 void reallocQueue(Queue* q);
 int deQueue(Queue* q, Bin* a);
 void freeQueue(Queue* q);
@@ -27,7 +27,7 @@ typedef struct {
 } MinHeap;
 
 void initMinHeap(MinHeap* m);
-Bin insert(MinHeap* m, Bin a);
+void insert(MinHeap* m, Bin a);
 int removeMin(MinHeap* m, Bin* a);
 void bubbleUp(MinHeap* m, int i);
 void bubbleDown(MinHeap* m, int i);
