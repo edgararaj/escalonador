@@ -22,7 +22,8 @@ char* get_callback_filepath()
     return path;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
     if (argc > 1 && strcmp(argv[1], "status") == 0) {
         mkfifo(TASK_FIFO, 0644);
 

@@ -14,6 +14,9 @@
 #include "orchestrator.h"
 #include "status.h"
 
+#define FCFS 0
+#define SJF 1
+
 char* get_client_callback_filepath_by_pid(int pid)
 {
     // create path to output file consisting of <output_folder>/<file>
@@ -40,7 +43,7 @@ char* get_tmp_filepath(const char* output_folder, const char* file)
     return path;
 }
 
-int handle_status(int wfd, Status s)
+int handle_status(Msg t, int wfd, Status s)
 {
     pid_t pid = fork();
     if (pid == 0) {
@@ -84,6 +87,8 @@ int logTermination(Msg t, const char* completed_path)
     sprintf(buf, "ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
     write(completed_fd, buf, strlen(buf));
     close(completed_fd);
+
+    return 1;
 }
 
 int main(int argc, char* argv[])
@@ -100,8 +105,21 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    MinHeap q;
-    initMinHeap(&q);
+    int scheduling_policy = FCFS; // Default is FCFS
+    if (argc > 3) {
+        if (strcmp(argv[3], "SJF") == 0) {
+            scheduling_policy = SJF;
+        }
+    }
+
+    MinHeap minq;
+    Queue q;
+
+    if (scheduling_policy == SJF) {
+        initMinHeap(&minq);
+    } else {
+        initQueue(&q);
+    }
 
     Status s;
     initStatus(s);
@@ -109,7 +127,7 @@ int main(int argc, char* argv[])
     int N = atoi(argv[2]); // Number of parallel tasks
     if (N <= 0) {
         printf("Number of parallel tasks must be greater than 0.\n");
-        freeMinHeap(&q);
+        freeMinHeap(&minq);
         freeStatus(s);
         return 1;
     }
@@ -120,7 +138,7 @@ int main(int argc, char* argv[])
     int fd = open(TASK_FIFO, O_RDONLY);
     if (fd == -1) {
         perror("Error opening FIFO for reading");
-        freeMinHeap(&q);
+        freeMinHeap(&minq);
         freeStatus(s);
         return 1;
     }
@@ -129,7 +147,7 @@ int main(int argc, char* argv[])
     if (wfd == -1) {
         perror("Error opening FIFO for writing");
         close(fd);
-        freeMinHeap(&q);
+        freeMinHeap(&minq);
         freeStatus(s);
         return 1;
     }
@@ -147,7 +165,7 @@ int main(int argc, char* argv[])
         switch (t.type) {
         // Messages from client
         case STATUS:
-            handle_status(wfd, s);
+            handle_status(t, wfd, s);
             break;
         case SINGLE:
         case PIPELINE: {
@@ -155,7 +173,7 @@ int main(int argc, char* argv[])
             bin.time = t.time;
             bin.file = t.command;
             bin.id = task_id++;
-            insert(&q, bin);
+            scheduling_policy == SJF ? insert(&minq, bin) : inQueue(&q, bin);
             schedTask(s, bin);
 
             int callback_fd;
@@ -175,7 +193,11 @@ int main(int argc, char* argv[])
         } break;
         // Messages from server
         case KILL: {
-            waitpid(t.pid, NULL, 0);
+            if (waitpid(t.pid, NULL, 0) == -1) {
+                perror("Error waiting for child process");
+                r = 1;
+                break;
+            }
         } break;
         case TERMINATED: {
             // Reinvidicar waiter fork
@@ -202,9 +224,10 @@ int main(int argc, char* argv[])
         } break;
         }
 
-        while (tasks_running < N && q.used) {
+        while (tasks_running < N && (scheduling_policy == SJF ? minq.used : q.used)) {
             Bin a;
-            if (removeMin(&q, &a)) {
+            int taken = (scheduling_policy == SJF ? removeMin(&minq, &a) : deQueue(&q, &a));
+            if (taken) {
                 execTask(s, a);
                 pid_t cpid = fork();
                 if (cpid == -1) {
@@ -232,15 +255,12 @@ int main(int argc, char* argv[])
 
     close(fd);
     close(wfd);
-    freeMinHeap(&q);
+    freeMinHeap(&minq);
+    freeQueue(&q);
     freeStatus(s);
     free(completed_path);
 
-    // Handle read errors
-    if (br == -1) {
-        perror("Error reading from FIFO");
-        return 1;
-    }
+    (scheduling_policy == SJF ? freeMinHeap(&minq) : freeQueue(&q));
 
     return r;
 }

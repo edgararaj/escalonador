@@ -2,9 +2,6 @@
 
 ## TODO
 - Pipelines
-- Refactor (pid -> id)
-- Server responde id
-- Escolher escalonador
 - mudar printf para write / ou comentar debug
 - error handling de syscalls
-- ./client status, nao bloqueie o servidor
+- tempo de execucao (o tempo total desde que o servidor recebe o pedido do cliente até o término do programa)
