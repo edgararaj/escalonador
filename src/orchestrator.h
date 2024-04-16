@@ -21,6 +21,7 @@ typedef enum {
     STATUS,
 
     // messages from the server to itself
+    KILL,
     TERMINATED
 } Type;
 

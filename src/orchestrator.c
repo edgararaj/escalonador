@@ -164,14 +164,27 @@ int main(int argc, char* argv[])
         // Messages from client
         case STATUS: {
             {
-                int callback_fd;
-                char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
-                callback_fd = open(callback_fifo, O_WRONLY);
+                pid_t pid = fork();
+                if (pid == 0){
+                    int callback_fd;
+                    char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
+                    callback_fd = open(callback_fifo, O_WRONLY);
+                    
+                    returnStatus(s, callback_fd);
 
-                returnStatus(s, callback_fd);
 
-                free(callback_fifo);
-                close(callback_fd);
+                    free(callback_fifo);
+                    close(callback_fd);
+
+                    Msg m;
+                    m.pid = getpid();
+                    m.type = KILL;
+                    ssize_t written_bytes = write(wfd,&m,sizeof(Msg));
+                    if(written_bytes == -1){
+                        perror("Nao consegui escrever:");
+                    }
+                    _exit(0); 
+                }
             }
         } break;
         case SINGLE:
@@ -196,6 +209,10 @@ int main(int argc, char* argv[])
             }
         } break;
         // Messages from server
+        case KILL:{
+            waitpid(t.pid, NULL, 0);
+        }break;
+
         case TERMINATED: {
             waitpid(t.pid, NULL, 0);
             {
