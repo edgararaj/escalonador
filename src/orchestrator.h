@@ -1,7 +1,7 @@
 #ifndef ORCHESTRATOR_H
 #define ORCHESTRATOR_H
 
-#define TASK_COMMAND_SIZE 300
+#define TASK_COMMAND_SIZE 301
 #define TASK_FIFO "/tmp/escalonador"
 
 // Message structure

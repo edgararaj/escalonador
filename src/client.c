@@ -22,23 +22,36 @@ char* get_callback_filepath()
     return path;
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
     if (argc > 1 && strcmp(argv[1], "status") == 0) {
         mkfifo(TASK_FIFO, 0644);
+
         char* callback_fifo = get_callback_filepath();
         mkfifo(callback_fifo, 0644);
 
         int fd = open(TASK_FIFO, O_WRONLY);
+        if (fd == -1) {
+            perror("Error opening FIFO for writing");
+            exit(EXIT_FAILURE);
+        }
 
         Msg t;
         t.pid = getpid();
         t.type = STATUS;
 
-        write(fd, &t, sizeof(Msg));
+        if (write(fd, &t, sizeof(Msg)) == -1) {
+            perror("Error writing to FIFO");
+            close(fd);
+            exit(EXIT_FAILURE);
+        }
         close(fd);
 
         int callback_fd = open(callback_fifo, O_RDONLY);
+        if (callback_fd == -1) {
+            perror("Error opening callback FIFO for reading");
+            exit(EXIT_FAILURE);
+        }
+
         struct s task;
         int prev_sts = STS_UNKNOWN;
         while (read(callback_fd, &task, sizeof(struct s)) > 0) {
@@ -68,7 +81,6 @@ int main(int argc, char* argv[])
         close(callback_fd);
         unlink(callback_fifo);
         free(callback_fifo);
-
     } else if (argc > 4 && strcmp(argv[1], "execute") == 0) {
         if (strcmp(argv[3], "-u") == 0) {
             printf("Single execution\n");
@@ -79,22 +91,41 @@ int main(int argc, char* argv[])
             printf("Time: %d, Command: %s\n", time, cmd);
 
             mkfifo(TASK_FIFO, 0644);
+
             char* callback_fifo = get_callback_filepath();
             mkfifo(callback_fifo, 0644);
 
             int fd = open(TASK_FIFO, O_WRONLY);
+            if (fd == -1) {
+                perror("Error opening FIFO for writing");
+                exit(EXIT_FAILURE);
+            }
+
             Msg t;
             t.time = time;
             t.pid = getpid();
             strncpy(t.command, cmd, TASK_COMMAND_SIZE);
             t.type = SINGLE;
 
-            write(fd, &t, sizeof(Msg));
+            if (write(fd, &t, sizeof(Msg)) == -1) {
+                perror("Error writing to FIFO");
+                close(fd);
+                exit(EXIT_FAILURE);
+            }
             close(fd);
 
             int callback_fd = open(callback_fifo, O_RDONLY);
+            if (callback_fd == -1) {
+                perror("Error opening callback FIFO for reading");
+                exit(EXIT_FAILURE);
+            }
+
             int task_pid;
-            read(callback_fd, &task_pid, sizeof(int));
+            if (read(callback_fd, &task_pid, sizeof(int)) == -1) {
+                perror("Error reading from callback FIFO");
+                close(callback_fd);
+                exit(EXIT_FAILURE);
+            }
 
             printf("Task PID: %d\n", task_pid);
 
@@ -112,4 +143,5 @@ int main(int argc, char* argv[])
         printf("\t%s execute 3000 -p 'prog-a arg-1 (...) | prog-b arg-1 (...)'\n", argv[0]);
         printf("\t%s status\n", argv[0]);
     }
+    return 0;
 }
