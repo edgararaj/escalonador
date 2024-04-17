@@ -1,3 +1,6 @@
+settings.json
 obj/
 tmp/
 bin/
+test/hello
+test/void
