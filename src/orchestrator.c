@@ -13,6 +13,7 @@
 #include "mysystem.h"
 #include "orchestrator.h"
 #include "status.h"
+#include "time.h"
 
 #define FCFS 0
 #define SJF 1
@@ -21,7 +22,7 @@ char* get_client_callback_filepath_by_pid(int pid)
 {
     // create path to output file consisting of <output_folder>/<file>
     // calculate length of <file>
-    int len = snprintf(NULL, 0, "/tmp/escalonador_%d", pid);
+    int len = snprintf(NULL, 0, "/tmp/escalonador_%d", pid) + 1;
     char* path = malloc(len);
 
     // A terminating null character is automatically appended after the content written.
@@ -34,7 +35,7 @@ char* get_tmp_filepath(const char* output_folder, const char* file)
 {
     // create path to output file consisting of <output_folder>/<file>
     // calculate length of <file>
-    int len = snprintf(NULL, 0, "%s/%s", output_folder, file);
+    int len = snprintf(NULL, 0, "%s/%s", output_folder, file) + 1;
     char* path = malloc(len);
 
     // A terminating null character is automatically appended after the content written.
@@ -46,7 +47,10 @@ char* get_tmp_filepath(const char* output_folder, const char* file)
 int handle_status(Msg t, int wfd, Status s)
 {
     pid_t pid = fork();
-    if (pid == 0) {
+    if (pid == -1) {
+        perror("Error forking process");
+        exit(EXIT_FAILURE);
+    } else if (pid == 0) {
         int callback_fd;
         char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
         callback_fd = open(callback_fifo, O_WRONLY);
@@ -73,17 +77,18 @@ int handle_status(Msg t, int wfd, Status s)
     return 1;
 }
 
-int logTermination(Msg t, const char* completed_path)
+int log_termination(Msg t, const char* completed_path)
 {
     int completed_fd = open(completed_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
     if (completed_fd == -1) {
         perror("Error opening completed file");
         return 0;
     }
+
     char buf[1024];
     int seconds = t.time / 1000;
     int milliseconds = t.time % 1000;
-    printf("ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
+    printf("-- ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
     sprintf(buf, "ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
     write(completed_fd, buf, strlen(buf));
     close(completed_fd);
@@ -102,7 +107,7 @@ int main(int argc, char* argv[])
                "paralelo.\n");
         printf("\tsched-policy: identificador da política de escalonamento, caso o "
                "servidor suporte várias políticas.\n");
-        return 1;
+        return EXIT_SUCCESS;
     }
 
     int scheduling_policy = FCFS; // Default is FCFS
@@ -129,7 +134,7 @@ int main(int argc, char* argv[])
         printf("Number of parallel tasks must be greater than 0.\n");
         freeMinHeap(&minq);
         freeStatus(s);
-        return 1;
+        return EXIT_FAILURE;
     }
     int tasks_running = 0; // Number of tasks running
 
@@ -140,7 +145,7 @@ int main(int argc, char* argv[])
         perror("Error opening FIFO for reading");
         freeMinHeap(&minq);
         freeStatus(s);
-        return 1;
+        return EXIT_FAILURE;
     }
 
     int wfd = open(TASK_FIFO, O_WRONLY);
@@ -149,14 +154,14 @@ int main(int argc, char* argv[])
         close(fd);
         freeMinHeap(&minq);
         freeStatus(s);
-        return 1;
+        return EXIT_FAILURE;
     }
 
     char* completed_path = get_tmp_filepath(argv[1], "completed.txt");
 
     int task_id = 0;
 
-    int r = 0;
+    int r = EXIT_SUCCESS;
 
     Msg t;
     ssize_t br;
@@ -173,12 +178,16 @@ int main(int argc, char* argv[])
             bin.time = t.time;
             bin.file = t.command;
             bin.id = task_id++;
+            if (clock_gettime(CLOCK_MONOTONIC, &bin.ts_start) == -1) {
+                perror("clock_gettime");
+                exit(EXIT_FAILURE);
+            }
+
             scheduling_policy == SJF ? insert(&minq, bin) : inQueue(&q, bin);
             schedTask(s, bin);
 
-            int callback_fd;
             char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
-            callback_fd = open(callback_fifo, O_WRONLY);
+            int callback_fd = open(callback_fifo, O_WRONLY);
             if (callback_fd == -1) {
                 perror("Error opening client callback FIFO");
                 free(callback_fifo);
@@ -195,7 +204,7 @@ int main(int argc, char* argv[])
         case KILL: {
             if (waitpid(t.pid, NULL, 0) == -1) {
                 perror("Error waiting for child process");
-                r = 1;
+                r = EXIT_FAILURE;
                 break;
             }
         } break;
@@ -204,16 +213,16 @@ int main(int argc, char* argv[])
             int status;
             if (waitpid(t.pid, &status, 0) == -1) {
                 perror("Error waiting for child process");
-                r = 1;
+                r = EXIT_FAILURE;
                 break;
             }
             if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
                 perror("Error executing task");
-                r = 1;
+                r = EXIT_FAILURE;
                 break;
             }
 
-            logTermination(t, completed_path);
+            log_termination(t, completed_path);
 
             // Retirar da lista de tarefas a correr
             Bin b;
@@ -235,9 +244,17 @@ int main(int argc, char* argv[])
                     free(a.file);
                     exit(EXIT_FAILURE);
                 } else if (cpid == 0) {
-                    Msg b;
                     printf("ID %d: %s\n", a.id, a.file);
-                    mysystem(a.file, argv[1], &b.time);
+                    mysystem(a.file, argv[1]);
+
+                    struct timespec ts_end;
+                    if (clock_gettime(CLOCK_MONOTONIC, &ts_end) == -1) {
+                        perror("clock_gettime");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    Msg b = {};
+                    b.time = get_delta_ms(a.ts_start, ts_end);
                     b.type = TERMINATED;
                     b.pid = getpid();
                     b.id = a.id;

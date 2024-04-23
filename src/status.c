@@ -123,7 +123,6 @@ void terminateTask(Status a, Bin b)
 
 void returnStatus(Status a, int fd)
 {
-    // TODO: Fazer fork, por causa do enunciado!!!
     St x;
     int i;
     for (i = 0; i < 3; i++) {

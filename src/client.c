@@ -13,7 +13,7 @@ char* get_callback_filepath()
 {
     // create path to output file consisting of <output_folder>/<file>
     // calculate length of <file>
-    int len = snprintf(NULL, 0, "/tmp/escalonador_%d", getpid());
+    int len = snprintf(NULL, 0, "/tmp/escalonador_%d", getpid()) + 1;
     char* path = malloc(len);
 
     // A terminating null character is automatically appended after the content written.
