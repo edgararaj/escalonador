@@ -87,8 +87,7 @@ int main(int argc, char* argv[])
         unlink(callback_fifo);
         free(callback_fifo);
     } else if (argc > 4 && strcmp(argv[1], "execute") == 0) {
-        if (strcmp(argv[3], "-u") == 0) {
-            printf("Single execution\n");
+        if (strcmp(argv[3], "-u") == 0 || strcmp(argv[3], "-p") == 0) {
 
             int time = atoi(argv[2]);
             char* cmd = argv[4];
@@ -108,10 +107,16 @@ int main(int argc, char* argv[])
 
             Msg t;
             t.time = time;
+            if (strcmp(argv[3], "-p") == 0) {
+                printf("Pipe execution\n");
+                t.type = PIPELINE;
+            } else {
+                printf("Single execution\n");
+                t.type = SINGLE;
+            }
             t.pid = getpid();
             strncpy(t.command, cmd, TASK_COMMAND_SIZE);
             t.command[TASK_COMMAND_SIZE - 1] = '\0';
-            t.type = SINGLE;
 
             if (write(fd, &t, sizeof(Msg)) == -1) {
                 perror("Error writing to FIFO");
@@ -138,8 +143,6 @@ int main(int argc, char* argv[])
             close(callback_fd);
             unlink(callback_fifo);
             free(callback_fifo);
-        } else if (strcmp(argv[3], "-p") == 0) {
-            printf("Pipe execution\n");
         } else {
             printf("Invalid option %s\n", argv[3]);
         }

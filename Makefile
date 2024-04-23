@@ -11,7 +11,7 @@ client: bin/client
 folders:
 	@mkdir -p src include obj bin tmp
 
-bin/orchestrator: obj/orchestrator.o obj/scheduler.o obj/status.o obj/mysystem.o obj/time.o
+bin/orchestrator: obj/orchestrator.o obj/scheduler.o obj/status.o obj/mysystem.o obj/mysystem_pipe.o obj/time.o
 	$(CC) $(LDFLAGS) $^ -o $@
 
 bin/client: obj/client.o

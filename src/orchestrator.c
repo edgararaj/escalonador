@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "mysystem.h"
+#include "mysystem_pipe.h"
 #include "orchestrator.h"
 #include "status.h"
 #include "time.h"
@@ -174,7 +175,11 @@ int main(int argc, char* argv[])
             break;
         case SINGLE:
         case PIPELINE: {
+            if (t.type == PIPELINE) {
+                printf("PIPELINE: %s\n", t.command);
+            }
             Bin bin;
+            bin.type = t.type;
             bin.time = t.time;
             bin.file = t.command;
             bin.id = task_id++;
@@ -245,7 +250,16 @@ int main(int argc, char* argv[])
                     exit(EXIT_FAILURE);
                 } else if (cpid == 0) {
                     printf("ID %d: %s\n", a.id, a.file);
-                    mysystem(a.file, argv[1]);
+                    switch (a.type) {
+                    case SINGLE:
+                        mysystem(a.file, argv[1]);
+                        break;
+                    case PIPELINE:
+                        mysystem_pipe(a.file, argv[1]);
+                        break;
+                    default:
+                        break;
+                    }
 
                     struct timespec ts_end;
                     if (clock_gettime(CLOCK_MONOTONIC, &ts_end) == -1) {

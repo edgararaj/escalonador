@@ -1,6 +1,8 @@
 #ifndef ORCHESTRATOR_H
 #define ORCHESTRATOR_H
 
+#include <sys/types.h>
+
 #define TASK_COMMAND_SIZE 301
 #define TASK_FIFO "/tmp/escalonador"
 
