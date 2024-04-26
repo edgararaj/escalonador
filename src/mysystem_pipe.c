@@ -11,89 +11,142 @@
 #define READ 0
 #define WRITE 1
 
-void mysystem_pipe(char* command, const char* output_folder)
-{
-    char* argv[8];
-    int argc = tokenizer_pipe(argv, command);
-    argv[argc] = NULL;
+#define MAX_COMMANDS 30
 
-    exec_list(argc, argv);
+
+int exec_command(char* arg){
+
+   char *exec_args[MAX_COMMANDS];
+
+
+   char *string;   
+   int exec_ret = 0;
+   int i=0;
+
+
+   char* command = strdup(arg);
+
+
+   string=strtok(command," ");
+   
+   while(string!=NULL){
+       exec_args[i]=string;
+       string=strtok(NULL," ");
+       i++;
+   }
+   exec_args[i]=NULL;
+   
+   exec_ret=execvp(exec_args[0],exec_args);
+   
+   return exec_ret;
 }
 
-void exec_list(int n, char* cmds[n])
-{
-    char* argv[8];
-    int pipe_fds[2][2], ptr;
 
-    for (int i = 0; i < n; i++) {
-        ptr = i % 2;
 
-        int argc = tokenizer(argv, cmds[i]);
-        argv[argc] = NULL;
+void pipeLine(char* progs[], int n){
 
-        if (i == 0) {
-            // first
-            pipe(pipe_fds[ptr]);
+    int p[n-1][2];
+    int i;
+    pid_t pid;
 
-            if (fork() == 0) {
-                close(pipe_fds[ptr][READ]);
-                dup2(pipe_fds[ptr][WRITE], STDOUT_FILENO);
-                close(pipe_fds[ptr][WRITE]);
 
-                execvp(argv[0], argv);
-                _exit(EXIT_FAILURE);
-            }
-            close(pipe_fds[ptr][WRITE]);
-            wait(NULL);
-        } else if (i + 1 == n) {
-            // last
-            if (fork() == 0) {
-                dup2(pipe_fds[(ptr + 1) % 2][READ], STDIN_FILENO);
-                close(pipe_fds[(ptr + 1) % 2][READ]);
+    for(i = 0; i < n; i++){
+       if(i ==0){
+            pipe(p[i]);
+           pid = fork();
+           if (pid == -1){
+            perror("Error in the Pipe Line:");
+            _exit(255);
+           }
+           else if(pid == 0){
+               close(p[i][0]);
 
-                execvp(argv[0], argv);
-                _exit(EXIT_FAILURE);
-            }
-            close(pipe_fds[(ptr + 1) % 2][READ]);
-            wait(NULL);
-        } else {
-            // middle
-            pipe(pipe_fds[ptr]);
+               dup2(p[i][1],1);
+               close(p[i][1]);      
 
-            if (fork() == 0) {
-                dup2(pipe_fds[(ptr + 1) % 2][READ], STDIN_FILENO);
-                close(pipe_fds[(ptr + 1) % 2][READ]);
-                dup2(pipe_fds[ptr][WRITE], STDOUT_FILENO);
-                close(pipe_fds[ptr][WRITE]);
+               exec_command(progs[i]);
+               _exit(0);
+           }
+           else{
+               close(p[i][1]);
+           }
+       
+       }
+       else if(i == n-1){
+           pid = fork();
+           if (pid == -1){
+            perror("Error in the Pipe Line:");
+            _exit(255);
+           }
+           else if(pid == 0){
+                
+               dup2(p[i-1][0],0);
+               close(p[i-1][0]);
+               
 
-                execvp(argv[0], argv);
-                _exit(EXIT_FAILURE);
-            }
-            close(pipe_fds[(ptr + 1) % 2][READ]);
-            close(pipe_fds[ptr][WRITE]);
-            wait(NULL);
+               exec_command(progs[i]);
+               _exit(0);
+           }
+           else{
+               close(p[i-1][0]);
+
+           }
+       }
+       else{
+
+            pipe(p[i]); // create the pipe
+
+           pid = fork();
+           if (pid == -1){
+            perror("Error in the Pipe Line:");
+            _exit(255);
+           }
+           else if(pid == 0){
+
+               dup2(p[i-1][0],0);
+                close(p[i-1][0]);
+
+               close(p[i][0]);
+               dup2(p[i][1],1);
+               close(p[i][1]);
+               
+
+               exec_command(progs[i]);
+               _exit(0);
+           }
+           else{
+               close(p[i-1][0]);
+               close(p[i][1]);
+
+           }
+       }
+   }
+   int status;
+   for(i = 0; i < n; i++){
+        wait(&status);
+        
+        if(WIFEXITED(status) && WEXITSTATUS(status)){
+            perror("Error in the status collection:");
+            _exit(255);
         }
-    }
+        
+   }
+
 }
 
-int tokenizer_pipe(char* argv[8], char* line)
-{
-    int argc;
-    char* buffer;
+// Falta o ficheiro de output
+void mysystem_pipe(char *args){
+    char* progs[300];
+    int i = 0;
+    char *string;
+    char* command = strdup(args);
+    string=strtok(command,"|");
 
-    for (argc = 0; (buffer = strtok_r(line, "|", &line)); argc++)
-        argv[argc] = strdup(buffer);
-
-    return argc;
-}
-
-int tokenizer(char* argv[8], char* line)
-{
-    int argc;
-    char* buffer;
-
-    for (argc = 0; (buffer = strtok_r(line, " ", &line)); argc++)
-        argv[argc] = strdup(buffer);
-
-    return argc;
+     while(string!=NULL){
+       progs[i]=string;
+       string=strtok(NULL,"|");
+       i++;
+   }
+    progs[i]=NULL;
+    pipeLine(progs,i);
 }

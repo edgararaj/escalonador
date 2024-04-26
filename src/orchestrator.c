@@ -255,7 +255,7 @@ int main(int argc, char* argv[])
                         mysystem(a.file, argv[1]);
                         break;
                     case PIPELINE:
-                        mysystem_pipe(a.file, argv[1]);
+                        mysystem_pipe(a.file /*,argv[1]*/);
                         break;
                     default:
                         break;
@@ -291,6 +291,7 @@ int main(int argc, char* argv[])
     freeStatus(s);
     free(completed_path);
 
+    // Free duas vezes, estamos a dar free em cima tbm!
     (scheduling_policy == SJF ? freeMinHeap(&minq) : freeQueue(&q));
 
     return r;
