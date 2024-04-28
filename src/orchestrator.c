@@ -89,7 +89,7 @@ int log_termination(Msg t, const char* completed_path)
     char buf[1024];
     int seconds = t.time / 1000;
     int milliseconds = t.time % 1000;
-    printf("-- ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
+    printf("-- Terminating ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
     sprintf(buf, "ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
     write(completed_fd, buf, strlen(buf));
     close(completed_fd);
@@ -121,11 +121,7 @@ int main(int argc, char* argv[])
     MinHeap minq;
     Queue q;
 
-    if (scheduling_policy == SJF) {
-        initMinHeap(&minq);
-    } else {
-        initQueue(&q);
-    }
+    (scheduling_policy == SJF ? initMinHeap(&minq) : initQueue(&q));
 
     Status s;
     initStatus(s);
@@ -177,6 +173,8 @@ int main(int argc, char* argv[])
         case PIPELINE: {
             if (t.type == PIPELINE) {
                 printf("PIPELINE: %s\n", t.command);
+            } else {
+                printf("SINGLE: %s\n", t.command);
             }
             Bin bin;
             bin.type = t.type;
@@ -249,13 +247,13 @@ int main(int argc, char* argv[])
                     free(a.file);
                     exit(EXIT_FAILURE);
                 } else if (cpid == 0) {
-                    printf("ID %d: %s\n", a.id, a.file);
+                    printf(">> Executing ID %d: %s\n", a.id, a.file);
                     switch (a.type) {
                     case SINGLE:
                         mysystem(a.file, argv[1]);
                         break;
                     case PIPELINE:
-                        mysystem_pipe(a.file /*,argv[1]*/);
+                        mysystem_pipe(a.file, argv[1]);
                         break;
                     default:
                         break;
@@ -286,12 +284,10 @@ int main(int argc, char* argv[])
 
     close(fd);
     close(wfd);
-    freeMinHeap(&minq);
-    freeQueue(&q);
+    unlink(TASK_FIFO);
     freeStatus(s);
     free(completed_path);
 
-    // Free duas vezes, estamos a dar free em cima tbm!
     (scheduling_policy == SJF ? freeMinHeap(&minq) : freeQueue(&q));
 
     return r;
