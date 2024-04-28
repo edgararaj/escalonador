@@ -111,8 +111,8 @@ int log_termination(Msg t, const char* completed_path)
     char buf[1024];
     int seconds = t.time / 1000;
     int milliseconds = t.time % 1000;
-    printf("-- Terminating ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
-    sprintf(buf, "%d: %s (%d.%ds)\n", t.id, t.command, seconds, milliseconds);
+    printf("-- ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
+    sprintf(buf, "%d: %s (%d.%03ds)\n", t.id, t.command, seconds, milliseconds);
     write(completed_fd, buf, strlen(buf));
     close(completed_fd);
 
@@ -181,6 +181,7 @@ int main(int argc, char* argv[])
     int task_id = 0;
 
     int r = EXIT_SUCCESS;
+    int closed = 0;
 
     Msg t;
     ssize_t br;
@@ -199,24 +200,6 @@ int main(int argc, char* argv[])
             break;
         case SINGLE:
         case PIPELINE: {
-            if (t.type == PIPELINE) {
-                printf("PIPELINE: %s\n", t.command);
-            } else {
-                printf("SINGLE: %s\n", t.command);
-            }
-            Bin bin;
-            bin.type = t.type;
-            bin.time = t.time;
-            bin.file = t.command;
-            bin.id = task_id++;
-            if (clock_gettime(CLOCK_MONOTONIC, &bin.ts_start) == -1) {
-                perror("clock_gettime");
-                exit(EXIT_FAILURE);
-            }
-
-            scheduling_policy == SJF ? insert(&minq, bin) : inQueue(&q, bin);
-            schedTask(s, bin);
-
             char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
             int callback_fd = open(callback_fifo, O_WRONLY);
             if (callback_fd == -1) {
@@ -225,8 +208,34 @@ int main(int argc, char* argv[])
                 break;
             }
 
-            int task_id = bin.id;
-            write(callback_fd, &task_id, sizeof(int));
+            if (t.time == 0) {
+                printf("0 time received, stopping when all tasks terminate...\n");
+                closed = 1;
+
+                int invalid_task_id = -1;
+                write(callback_fd, &invalid_task_id, sizeof(int));
+            } else if (!closed) {
+                // if (t.type == PIPELINE) {
+                //     printf("PIPELINE: %s\n", t.command);
+                // } else {
+                //     printf("SINGLE: %s\n", t.command);
+                // }
+                Bin bin;
+                bin.type = t.type;
+                bin.time = t.time;
+                bin.file = t.command;
+                bin.id = task_id++;
+                if (clock_gettime(CLOCK_MONOTONIC, &bin.ts_start) == -1) {
+                    perror("clock_gettime");
+                    exit(EXIT_FAILURE);
+                }
+
+                scheduling_policy == SJF ? insert(&minq, bin) : inQueue(&q, bin);
+                schedTask(s, bin);
+
+                int task_id = bin.id;
+                write(callback_fd, &task_id, sizeof(int));
+            }
 
             free(callback_fifo);
             close(callback_fd);
@@ -264,6 +273,10 @@ int main(int argc, char* argv[])
         } break;
         }
 
+        if (tasks_running == 0 && (scheduling_policy == SJF ? minq.used : q.used) == 0 && closed) {
+            break;
+        }
+
         while (tasks_running < N && (scheduling_policy == SJF ? minq.used : q.used)) {
             Bin a;
             int taken = (scheduling_policy == SJF ? removeMin(&minq, &a) : deQueue(&q, &a));
@@ -275,7 +288,7 @@ int main(int argc, char* argv[])
                     free(a.file);
                     exit(EXIT_FAILURE);
                 } else if (cpid == 0) {
-                    printf(">> Executing ID %d: %s\n", a.id, a.file);
+                    printf(">> ID %d: %s\n", a.id, a.file);
                     switch (a.type) {
                     case SINGLE:
                         mysystem(a.file, argv[1]);

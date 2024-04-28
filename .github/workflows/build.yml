@@ -1,5 +1,5 @@
 name: Build [make]
-on: [push, pull_request]
+on: [push]
 
 jobs:
   build:
@@ -7,10 +7,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Build with make
-      working-directory: ./
-      run: make
-
+      - name: Build with make
+        working-directory: ./
+        run: make
