@@ -53,34 +53,11 @@ int main(int argc, char* argv[])
             exit(EXIT_FAILURE);
         }
 
-        struct s task;
-        int prev_sts = STS_UNKNOWN;
-        while (read(callback_fd, &task, sizeof(struct s)) > 0) {
-            if (task.status != prev_sts) {
-                switch (task.status) {
-                case STS_SCHEDULED:
-                    printf("Scheduled:\n");
-                    break;
-                case STS_EXECUTING:
-                    printf("Executing:\n");
-                    break;
-                case STS_TERMINATED:
-                    printf("Terminated:\n");
-                    break;
-                default:
-                    break;
-                }
-                prev_sts = task.status;
-            }
-            if (task.status == STS_TERMINATED) {
-                printf("%d: %s (%dms)\n", task.id, task.file, task.time);
-            } else {
-                printf("%d: %s\n", task.id, task.file);
-            }
-        }
-
-        if (prev_sts == STS_UNKNOWN) {
-            printf("No tasks\n");
+        // print to stdout all the info from the callback FIFO
+        char buffer[1024];
+        int bytes_read;
+        while ((bytes_read = read(callback_fd, buffer, sizeof(buffer))) > 0) {
+            write(STDOUT_FILENO, buffer, bytes_read);
         }
 
         close(callback_fd);

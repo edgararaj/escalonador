@@ -45,7 +45,7 @@ char* get_tmp_filepath(const char* output_folder, const char* file)
     return path;
 }
 
-int handle_status(Msg t, int wfd, Status s)
+int handle_status(Msg t, int wfd, Status s, int completed_fd)
 {
     pid_t pid = fork();
     if (pid == -1) {
@@ -61,7 +61,29 @@ int handle_status(Msg t, int wfd, Status s)
             return 0;
         }
 
-        returnStatus(s, callback_fd);
+        close(1); /* Close original stdout */
+        dup2(callback_fd, 1); /* Move mystdout to FD 1 */
+
+        char buf[1024];
+        St x;
+        printf("Scheduled:\n");
+        for (x = s[0]->s; x; x = x->next) {
+            sprintf(buf, "%d: %s\n", x->data.id, x->data.file);
+            write(callback_fd, buf, strlen(buf));
+        }
+
+        printf("Executing:\n");
+        for (x = s[1]->s; x; x = x->next) {
+            sprintf(buf, "%d: %s\n", x->data.id, x->data.file);
+            write(callback_fd, buf, strlen(buf));
+        }
+
+        // print completed file to stdout
+        printf("Terminated:\n");
+        int bytes_read;
+        while ((bytes_read = read(completed_fd, buf, sizeof(buf))) > 0) {
+            write(1, buf, bytes_read);
+        }
 
         free(callback_fifo);
         close(callback_fd);
@@ -90,7 +112,7 @@ int log_termination(Msg t, const char* completed_path)
     int seconds = t.time / 1000;
     int milliseconds = t.time % 1000;
     printf("-- Terminating ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
-    sprintf(buf, "ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
+    sprintf(buf, "%d: %s (%d.%ds)\n", t.id, t.command, seconds, milliseconds);
     write(completed_fd, buf, strlen(buf));
     close(completed_fd);
 
@@ -167,7 +189,13 @@ int main(int argc, char* argv[])
         switch (t.type) {
         // Messages from client
         case STATUS:
-            handle_status(t, wfd, s);
+            int completed_fd = open(completed_path, O_CREAT | O_RDONLY, 0644);
+            if (completed_fd == -1) {
+                perror("Error opening completed file");
+                return 0;
+            }
+            handle_status(t, wfd, s, completed_fd);
+            close(completed_fd);
             break;
         case SINGLE:
         case PIPELINE: {
@@ -267,6 +295,8 @@ int main(int argc, char* argv[])
 
                     Msg b = {};
                     b.time = get_delta_ms(a.ts_start, ts_end);
+                    strncpy(b.command, a.file, TASK_COMMAND_SIZE);
+                    b.command[TASK_COMMAND_SIZE - 1] = '\0';
                     b.type = TERMINATED;
                     b.pid = getpid();
                     b.id = a.id;
