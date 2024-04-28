@@ -11,7 +11,7 @@ client: bin/client
 folders:
 	@mkdir -p src include obj bin tmp
 
-bin/orchestrator: obj/orchestrator.o obj/scheduler.o obj/status.o obj/mysystem.o
+bin/orchestrator: obj/orchestrator.o obj/scheduler.o obj/status.o obj/mysystem.o obj/mysystem_pipe.o obj/time.o
 	$(CC) $(LDFLAGS) $^ -o $@
 
 bin/client: obj/client.o
@@ -21,7 +21,7 @@ obj/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f obj/* tmp/* bin/*
+	rm -f obj/* tmp/* bin/* /tmp/escalonador*
 
 format:
 # Check if clang is installed
@@ -34,5 +34,5 @@ check-memory:
 	@command -v valgrind &> /dev/null || echo "[Warning] Please install `valgrind`. Read documentation."
 # Run valgrind against the executables
 	@DEBUG=1 make -s && echo "[Compiling]"
-	@valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./bin/orchestrator tmp
+	@valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./bin/orchestrator
 #	@valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose ./bin/client

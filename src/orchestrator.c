@@ -11,8 +11,10 @@
 #include <unistd.h>
 
 #include "mysystem.h"
+#include "mysystem_pipe.h"
 #include "orchestrator.h"
 #include "status.h"
+#include "time.h"
 
 #define FCFS 0
 #define SJF 1
@@ -21,7 +23,7 @@ char* get_client_callback_filepath_by_pid(int pid)
 {
     // create path to output file consisting of <output_folder>/<file>
     // calculate length of <file>
-    int len = snprintf(NULL, 0, "/tmp/escalonador_%d", pid);
+    int len = snprintf(NULL, 0, "/tmp/escalonador_%d", pid) + 1;
     char* path = malloc(len);
 
     // A terminating null character is automatically appended after the content written.
@@ -34,7 +36,7 @@ char* get_tmp_filepath(const char* output_folder, const char* file)
 {
     // create path to output file consisting of <output_folder>/<file>
     // calculate length of <file>
-    int len = snprintf(NULL, 0, "%s/%s", output_folder, file);
+    int len = snprintf(NULL, 0, "%s/%s", output_folder, file) + 1;
     char* path = malloc(len);
 
     // A terminating null character is automatically appended after the content written.
@@ -43,10 +45,13 @@ char* get_tmp_filepath(const char* output_folder, const char* file)
     return path;
 }
 
-int handle_status(Msg t, int wfd, Status s)
+int handle_status(Msg t, int wfd, Status s, int completed_fd)
 {
     pid_t pid = fork();
-    if (pid == 0) {
+    if (pid == -1) {
+        perror("Error forking process");
+        exit(EXIT_FAILURE);
+    } else if (pid == 0) {
         int callback_fd;
         char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
         callback_fd = open(callback_fifo, O_WRONLY);
@@ -56,7 +61,29 @@ int handle_status(Msg t, int wfd, Status s)
             return 0;
         }
 
-        returnStatus(s, callback_fd);
+        close(1); /* Close original stdout */
+        dup2(callback_fd, 1); /* Move mystdout to FD 1 */
+
+        char buf[1024];
+        St x;
+        printf("Scheduled:\n");
+        for (x = s[0]->s; x; x = x->next) {
+            sprintf(buf, "%d: %s\n", x->data.id, x->data.file);
+            write(callback_fd, buf, strlen(buf));
+        }
+
+        printf("Executing:\n");
+        for (x = s[1]->s; x; x = x->next) {
+            sprintf(buf, "%d: %s\n", x->data.id, x->data.file);
+            write(callback_fd, buf, strlen(buf));
+        }
+
+        // print completed file to stdout
+        printf("Terminated:\n");
+        int bytes_read;
+        while ((bytes_read = read(completed_fd, buf, sizeof(buf))) > 0) {
+            write(1, buf, bytes_read);
+        }
 
         free(callback_fifo);
         close(callback_fd);
@@ -73,18 +100,19 @@ int handle_status(Msg t, int wfd, Status s)
     return 1;
 }
 
-int logTermination(Msg t, const char* completed_path)
+int log_termination(Msg t, const char* completed_path)
 {
     int completed_fd = open(completed_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
     if (completed_fd == -1) {
         perror("Error opening completed file");
         return 0;
     }
+
     char buf[1024];
     int seconds = t.time / 1000;
     int milliseconds = t.time % 1000;
-    printf("ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
-    sprintf(buf, "ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
+    printf("-- ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
+    sprintf(buf, "%d: %s (%d.%03ds)\n", t.id, t.command, seconds, milliseconds);
     write(completed_fd, buf, strlen(buf));
     close(completed_fd);
 
@@ -102,7 +130,7 @@ int main(int argc, char* argv[])
                "paralelo.\n");
         printf("\tsched-policy: identificador da política de escalonamento, caso o "
                "servidor suporte várias políticas.\n");
-        return 1;
+        return EXIT_SUCCESS;
     }
 
     int scheduling_policy = FCFS; // Default is FCFS
@@ -115,11 +143,7 @@ int main(int argc, char* argv[])
     MinHeap minq;
     Queue q;
 
-    if (scheduling_policy == SJF) {
-        initMinHeap(&minq);
-    } else {
-        initQueue(&q);
-    }
+    (scheduling_policy == SJF ? initMinHeap(&minq) : initQueue(&q));
 
     Status s;
     initStatus(s);
@@ -129,7 +153,7 @@ int main(int argc, char* argv[])
         printf("Number of parallel tasks must be greater than 0.\n");
         freeMinHeap(&minq);
         freeStatus(s);
-        return 1;
+        return EXIT_FAILURE;
     }
     int tasks_running = 0; // Number of tasks running
 
@@ -140,7 +164,7 @@ int main(int argc, char* argv[])
         perror("Error opening FIFO for reading");
         freeMinHeap(&minq);
         freeStatus(s);
-        return 1;
+        return EXIT_FAILURE;
     }
 
     int wfd = open(TASK_FIFO, O_WRONLY);
@@ -149,14 +173,15 @@ int main(int argc, char* argv[])
         close(fd);
         freeMinHeap(&minq);
         freeStatus(s);
-        return 1;
+        return EXIT_FAILURE;
     }
 
     char* completed_path = get_tmp_filepath(argv[1], "completed.txt");
 
     int task_id = 0;
 
-    int r = 0;
+    int r = EXIT_SUCCESS;
+    int closed = 0;
 
     Msg t;
     ssize_t br;
@@ -165,28 +190,52 @@ int main(int argc, char* argv[])
         switch (t.type) {
         // Messages from client
         case STATUS:
-            handle_status(t, wfd, s);
+            int completed_fd = open(completed_path, O_CREAT | O_RDONLY, 0644);
+            if (completed_fd == -1) {
+                perror("Error opening completed file");
+                return 0;
+            }
+            handle_status(t, wfd, s, completed_fd);
+            close(completed_fd);
             break;
         case SINGLE:
         case PIPELINE: {
-            Bin bin;
-            bin.time = t.time;
-            bin.file = t.command;
-            bin.id = task_id++;
-            scheduling_policy == SJF ? insert(&minq, bin) : inQueue(&q, bin);
-            schedTask(s, bin);
-
-            int callback_fd;
             char* callback_fifo = get_client_callback_filepath_by_pid(t.pid);
-            callback_fd = open(callback_fifo, O_WRONLY);
+            int callback_fd = open(callback_fifo, O_WRONLY);
             if (callback_fd == -1) {
                 perror("Error opening client callback FIFO");
                 free(callback_fifo);
                 break;
             }
 
-            int task_id = bin.id;
-            write(callback_fd, &task_id, sizeof(int));
+            if (t.time == 0) {
+                printf("0 time received, stopping when all tasks terminate...\n");
+                closed = 1;
+
+                int invalid_task_id = -1;
+                write(callback_fd, &invalid_task_id, sizeof(int));
+            } else if (!closed) {
+                // if (t.type == PIPELINE) {
+                //     printf("PIPELINE: %s\n", t.command);
+                // } else {
+                //     printf("SINGLE: %s\n", t.command);
+                // }
+                Bin bin;
+                bin.type = t.type;
+                bin.time = t.time;
+                bin.file = t.command;
+                bin.id = task_id++;
+                if (clock_gettime(CLOCK_MONOTONIC, &bin.ts_start) == -1) {
+                    perror("clock_gettime");
+                    exit(EXIT_FAILURE);
+                }
+
+                scheduling_policy == SJF ? insert(&minq, bin) : inQueue(&q, bin);
+                schedTask(s, bin);
+
+                int task_id = bin.id;
+                write(callback_fd, &task_id, sizeof(int));
+            }
 
             free(callback_fifo);
             close(callback_fd);
@@ -195,7 +244,7 @@ int main(int argc, char* argv[])
         case KILL: {
             if (waitpid(t.pid, NULL, 0) == -1) {
                 perror("Error waiting for child process");
-                r = 1;
+                r = EXIT_FAILURE;
                 break;
             }
         } break;
@@ -204,16 +253,16 @@ int main(int argc, char* argv[])
             int status;
             if (waitpid(t.pid, &status, 0) == -1) {
                 perror("Error waiting for child process");
-                r = 1;
+                r = EXIT_FAILURE;
                 break;
             }
             if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
                 perror("Error executing task");
-                r = 1;
+                r = EXIT_FAILURE;
                 break;
             }
 
-            logTermination(t, completed_path);
+            log_termination(t, completed_path);
 
             // Retirar da lista de tarefas a correr
             Bin b;
@@ -222,6 +271,10 @@ int main(int argc, char* argv[])
             terminateTask(s, b);
             tasks_running--;
         } break;
+        }
+
+        if (tasks_running == 0 && (scheduling_policy == SJF ? minq.used : q.used) == 0 && closed) {
+            break;
         }
 
         while (tasks_running < N && (scheduling_policy == SJF ? minq.used : q.used)) {
@@ -235,9 +288,28 @@ int main(int argc, char* argv[])
                     free(a.file);
                     exit(EXIT_FAILURE);
                 } else if (cpid == 0) {
-                    Msg b;
-                    printf("ID %d: %s\n", a.id, a.file);
-                    mysystem(a.file, argv[1], &b.time);
+                    printf(">> ID %d: %s\n", a.id, a.file);
+                    switch (a.type) {
+                    case SINGLE:
+                        mysystem(a.file, argv[1]);
+                        break;
+                    case PIPELINE:
+                        mysystem_pipe(a.file, argv[1]);
+                        break;
+                    default:
+                        break;
+                    }
+
+                    struct timespec ts_end;
+                    if (clock_gettime(CLOCK_MONOTONIC, &ts_end) == -1) {
+                        perror("clock_gettime");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    Msg b = {};
+                    b.time = get_delta_ms(a.ts_start, ts_end);
+                    strncpy(b.command, a.file, TASK_COMMAND_SIZE);
+                    b.command[TASK_COMMAND_SIZE - 1] = '\0';
                     b.type = TERMINATED;
                     b.pid = getpid();
                     b.id = a.id;
@@ -255,8 +327,7 @@ int main(int argc, char* argv[])
 
     close(fd);
     close(wfd);
-    freeMinHeap(&minq);
-    freeQueue(&q);
+    unlink(TASK_FIFO);
     freeStatus(s);
     free(completed_path);
 

@@ -22,7 +22,7 @@ typedef struct st {
 typedef struct aux {
     St s, e;
 } Aux;
-typedef Aux* Status[3];
+typedef Aux* Status[2];
 // mudar de int para o tipo do pid
 void returnStatus(Status a, int fd);
 void initStatus(Status a);

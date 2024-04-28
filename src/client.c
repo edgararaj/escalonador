@@ -13,7 +13,7 @@ char* get_callback_filepath()
 {
     // create path to output file consisting of <output_folder>/<file>
     // calculate length of <file>
-    int len = snprintf(NULL, 0, "/tmp/escalonador_%d", getpid());
+    int len = snprintf(NULL, 0, "/tmp/escalonador_%d", getpid()) + 1;
     char* path = malloc(len);
 
     // A terminating null character is automatically appended after the content written.
@@ -53,42 +53,18 @@ int main(int argc, char* argv[])
             exit(EXIT_FAILURE);
         }
 
-        struct s task;
-        int prev_sts = STS_UNKNOWN;
-        while (read(callback_fd, &task, sizeof(struct s)) > 0) {
-            if (task.status != prev_sts) {
-                switch (task.status) {
-                case STS_SCHEDULED:
-                    printf("Scheduled:\n");
-                    break;
-                case STS_EXECUTING:
-                    printf("Executing:\n");
-                    break;
-                case STS_TERMINATED:
-                    printf("Terminated:\n");
-                    break;
-                default:
-                    break;
-                }
-                prev_sts = task.status;
-            }
-            if (task.status == STS_TERMINATED) {
-                printf("%d: %s (%dms)\n", task.id, task.file, task.time);
-            } else {
-                printf("%d: %s\n", task.id, task.file);
-            }
-        }
-
-        if (prev_sts == STS_UNKNOWN) {
-            printf("No tasks\n");
+        // print to stdout all the info from the callback FIFO
+        char buffer[1024];
+        int bytes_read;
+        while ((bytes_read = read(callback_fd, buffer, sizeof(buffer))) > 0) {
+            write(STDOUT_FILENO, buffer, bytes_read);
         }
 
         close(callback_fd);
         unlink(callback_fifo);
         free(callback_fifo);
     } else if (argc > 4 && strcmp(argv[1], "execute") == 0) {
-        if (strcmp(argv[3], "-u") == 0) {
-            printf("Single execution\n");
+        if (strcmp(argv[3], "-u") == 0 || strcmp(argv[3], "-p") == 0) {
 
             int time = atoi(argv[2]);
             char* cmd = argv[4];
@@ -108,10 +84,16 @@ int main(int argc, char* argv[])
 
             Msg t;
             t.time = time;
+            if (strcmp(argv[3], "-p") == 0) {
+                printf("Pipe execution\n");
+                t.type = PIPELINE;
+            } else {
+                printf("Single execution\n");
+                t.type = SINGLE;
+            }
             t.pid = getpid();
             strncpy(t.command, cmd, TASK_COMMAND_SIZE);
             t.command[TASK_COMMAND_SIZE - 1] = '\0';
-            t.type = SINGLE;
 
             if (write(fd, &t, sizeof(Msg)) == -1) {
                 perror("Error writing to FIFO");
@@ -138,8 +120,6 @@ int main(int argc, char* argv[])
             close(callback_fd);
             unlink(callback_fifo);
             free(callback_fifo);
-        } else if (strcmp(argv[3], "-p") == 0) {
-            printf("Pipe execution\n");
         } else {
             printf("Invalid option %s\n", argv[3]);
         }

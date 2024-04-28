@@ -9,7 +9,7 @@
 
 void initStatus(Status a)
 {
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 2; i++) {
         a[i] = malloc(sizeof(Aux)); // Allocate memory for each Aux struct
         if (a[i] == NULL) {
             // Handle allocation failure if needed
@@ -24,7 +24,7 @@ void freeStatus(Status a)
 {
     int i;
     St x, tmp;
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 2; i++) {
         x = a[i]->s;
         while (x) {
             tmp = x;
@@ -113,20 +113,19 @@ void terminateTask(Status a, Bin b)
     x->next = NULL;
     x->data.status = 1;
     x->data.time = b.time;
-    if (!a[2]->s) {
-        a[2]->s = a[2]->e = x;
-    } else {
-        a[2]->e->next = x;
-        a[2]->e = x;
-    }
+    // if (!a[2]->s) {
+    //     a[2]->s = a[2]->e = x;
+    // } else {
+    //     a[2]->e->next = x;
+    //     a[2]->e = x;
+    // }
 }
 
 void returnStatus(Status a, int fd)
 {
-    // TODO: Fazer fork, por causa do enunciado!!!
     St x;
     int i;
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 2; i++) {
         for (x = a[i]->s; x; x = x->next) {
             write(fd, &(x->data), sizeof(struct s));
         }

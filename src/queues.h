@@ -1,10 +1,14 @@
 #ifndef QUEUES_H
 #define QUEUES_H
 
-// precisa do id
+#include "orchestrator.h"
+#include <time.h>
+
 typedef struct {
     char* file;
+    Type type;
     int time, id;
+    struct timespec ts_start;
 } Bin;
 
 // Queue

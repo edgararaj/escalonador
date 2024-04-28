@@ -22,8 +22,9 @@ void reallocQueue(Queue* q)
     int i, j;
     for (j = 0, i = q->ini; j < q->used; j++) {
         new[j].file = q->args[i].file;
-        new[j].id = q->args[i].id;
         new[j].time = q->args[i].time;
+        new[j].type = q->args[i].type;
+        new[j].id = q->args[i].id;
 
         q->args[i].file = NULL;
         i = (i + 1) % q->used;
@@ -42,8 +43,9 @@ void inQueue(Queue* q, Bin a)
     int pos = (q->ini + q->used) % q->size;
 
     q->args[pos].file = strdup(a.file);
-    q->args[pos].id = a.id;
     q->args[pos].time = a.time;
+    q->args[pos].type = a.type;
+    q->args[pos].id = a.id;
 
     q->used++;
 }
@@ -55,8 +57,10 @@ int deQueue(Queue* q, Bin* a)
         int pos = q->ini;
 
         a->file = q->args[pos].file;
-        a->id = q->args[pos].id;
         a->time = q->args[pos].id;
+        a->type = q->args[pos].type;
+        a->id = q->args[pos].id;
+
         q->args[pos].file = NULL;
 
         i = 1;
@@ -81,8 +85,9 @@ void insert(MinHeap* m, Bin a)
         m->args = realloc(m->args, sizeof(Bin) * m->size);
     }
 
-    m->args[m->used].time = a.time;
     m->args[m->used].file = strdup(a.file);
+    m->args[m->used].time = a.time;
+    m->args[m->used].type = a.type;
     m->args[m->used].id = a.id;
 
     bubbleUp(m, m->used);
@@ -97,9 +102,15 @@ void bubbleUp(MinHeap* m, int i)
         tmp = m->args[i].file;
         m->args[i].file = m->args[x].file;
         m->args[x].file = tmp;
+
         y = m->args[i].time;
         m->args[i].time = m->args[x].time;
         m->args[x].time = y;
+
+        y = m->args[i].type;
+        m->args[i].type = m->args[x].type;
+        m->args[x].type = y;
+
         y = m->args[i].id;
         m->args[i].id = m->args[x].id;
         m->args[x].id = y;
@@ -115,11 +126,16 @@ int removeMin(MinHeap* m, Bin* a)
     if (m->used) {
         a->file = m->args[0].file;
         a->time = m->args[0].time;
+        a->type = m->args[0].type;
         a->id = m->args[0].id;
+
         m->used--;
+
         m->args[0].file = m->args[m->used].file;
         m->args[0].time = m->args[m->used].time;
+        m->args[0].type = m->args[m->used].type;
         m->args[0].id = m->args[m->used].id;
+
         m->args[m->used].file = NULL;
 
         bubbleDown(m, 0);
@@ -148,9 +164,15 @@ void bubbleDown(MinHeap* m, int i)
             tmp = m->args[i].file;
             m->args[i].file = m->args[min].file;
             m->args[min].file = tmp;
+
             y = m->args[i].time;
             m->args[i].time = m->args[min].time;
             m->args[min].time = y;
+
+            y = m->args[i].type;
+            m->args[i].type = m->args[min].type;
+            m->args[min].type = y;
+
             y = m->args[i].id;
             m->args[i].id = m->args[min].id;
             m->args[min].id = y;
