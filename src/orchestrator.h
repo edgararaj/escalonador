@@ -34,6 +34,7 @@ typedef struct {
     pid_t pid;
     int id;
     int time;
+    int wait_time;
     char command[TASK_COMMAND_SIZE];
     Type type;
 } Msg;

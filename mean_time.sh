@@ -16,4 +16,4 @@ done < "$file_path"
 # Calculate the mean time
 mean_time=$(echo "scale=3; $total_time / $line_count" | bc)
 
-echo "Mean execution time: $mean_time seconds"
+echo "Tempo médio de espera: $mean_time seconds"

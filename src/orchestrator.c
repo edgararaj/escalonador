@@ -111,8 +111,10 @@ int log_termination(Msg t, const char* completed_path)
     char buf[1024];
     int seconds = t.time / 1000;
     int milliseconds = t.time % 1000;
+    int wait_seconds = t.wait_time / 1000;
+    int wait_milliseconds = t.wait_time % 1000;
     printf("-- ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
-    sprintf(buf, "%d: %s (%d.%03ds)\n", t.id, t.command, seconds, milliseconds);
+    sprintf(buf, "%d: %s [%d.%03ds] (%d.%03ds)\n", t.id, t.command, seconds, milliseconds, wait_seconds, wait_milliseconds);
     write(completed_fd, buf, strlen(buf));
     close(completed_fd);
 
@@ -288,7 +290,15 @@ int main(int argc, char* argv[])
                     free(a.file);
                     exit(EXIT_FAILURE);
                 } else if (cpid == 0) {
+                    Msg b = {};
                     printf(">> ID %d: %s\n", a.id, a.file);
+                    struct timespec ts_end;
+                    if (clock_gettime(CLOCK_MONOTONIC, &ts_end) == -1) {
+                        perror("clock_gettime");
+                        exit(EXIT_FAILURE);
+                    }
+                    b.wait_time = get_delta_ms(a.ts_start, ts_end);
+
                     switch (a.type) {
                     case SINGLE:
                         mysystem(a.file, argv[1]);
@@ -300,13 +310,11 @@ int main(int argc, char* argv[])
                         break;
                     }
 
-                    struct timespec ts_end;
                     if (clock_gettime(CLOCK_MONOTONIC, &ts_end) == -1) {
                         perror("clock_gettime");
                         exit(EXIT_FAILURE);
                     }
 
-                    Msg b = {};
                     b.time = get_delta_ms(a.ts_start, ts_end);
                     strncpy(b.command, a.file, TASK_COMMAND_SIZE);
                     b.command[TASK_COMMAND_SIZE - 1] = '\0';
