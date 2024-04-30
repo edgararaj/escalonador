@@ -53,8 +53,6 @@ void pipeLine(char* progs[], int n, int mystdout)
                 perror("Error in the Pipe Line:");
                 _exit(255);
             } else if (pid == 0) {
-
-                
                 dup2(mystdout, 2); /* Move mystdout to FD 2 */
                 close(p[i][0]);
 
@@ -73,11 +71,9 @@ void pipeLine(char* progs[], int n, int mystdout)
                 perror("Error in the Pipe Line:");
                 _exit(255);
             } else if (pid == 0) {
-
                 dup2(p[i - 1][0], 0);
                 close(p[i - 1][0]);
 
-               
                 dup2(mystdout, 1); /* Move mystdout to FD 1 */
                 dup2(mystdout, 2); /* Move mystdout to FD 2 */
 
@@ -122,7 +118,6 @@ void pipeLine(char* progs[], int n, int mystdout)
         }
     }
 }
-
 
 void mysystem_pipe(char* args, const char* output_folder)
 {

@@ -49,9 +49,7 @@ int mysystem(const char* command, const char* output_folder)
             free(path);
         }
 
-        close(1); /* Close original stdout */
         dup2(mystdout, 1); /* Move mystdout to FD 1 */
-        close(2); /* Close original stderr */
         dup2(mystdout, 2); /* Move mystdout to FD 2 */
 
         execvp(exec_args[0], exec_args);
