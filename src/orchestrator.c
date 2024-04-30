@@ -45,7 +45,7 @@ char* get_tmp_filepath(const char* output_folder, const char* file)
     return path;
 }
 
-int handle_status(Msg t, int wfd, Status s, int completed_fd)
+int handle_status(Msg t, int wfd, Status s)
 {
     pid_t pid = fork();
     if (pid == -1) {
@@ -61,29 +61,7 @@ int handle_status(Msg t, int wfd, Status s, int completed_fd)
             return 0;
         }
 
-        close(1); /* Close original stdout */
-        dup2(callback_fd, 1); /* Move mystdout to FD 1 */
-
-        char buf[1024];
-        St x;
-        printf("Scheduled:\n");
-        for (x = s[0]->s; x; x = x->next) {
-            sprintf(buf, "%d: %s\n", x->data.id, x->data.file);
-            write(callback_fd, buf, strlen(buf));
-        }
-
-        printf("Executing:\n");
-        for (x = s[1]->s; x; x = x->next) {
-            sprintf(buf, "%d: %s\n", x->data.id, x->data.file);
-            write(callback_fd, buf, strlen(buf));
-        }
-
-        // print completed file to stdout
-        printf("Terminated:\n");
-        int bytes_read;
-        while ((bytes_read = read(completed_fd, buf, sizeof(buf))) > 0) {
-            write(1, buf, bytes_read);
-        }
+        returnStatus(s, callback_fd);
 
         free(callback_fifo);
         close(callback_fd);
@@ -192,13 +170,7 @@ int main(int argc, char* argv[])
         switch (t.type) {
         // Messages from client
         case STATUS:
-            int completed_fd = open(completed_path, O_CREAT | O_RDONLY, 0644);
-            if (completed_fd == -1) {
-                perror("Error opening completed file");
-                return 0;
-            }
-            handle_status(t, wfd, s, completed_fd);
-            close(completed_fd);
+            handle_status(t, wfd, s);
             break;
         case SINGLE:
         case PIPELINE: {
