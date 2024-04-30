@@ -1,6 +1,6 @@
 #ifndef MYSYSTEM_H
 #define MYSYSTEM_H
 
-int mysystem(const char* command, const char* output_folder);
+int mysystem(const char* command, int mystdout);
 
 #endif

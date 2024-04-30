@@ -119,16 +119,8 @@ void pipeLine(char* progs[], int n, int mystdout)
     }
 }
 
-void mysystem_pipe(char* args, const char* output_folder)
+void mysystem_pipe(char* args, int mystdout)
 {
-    int mystdout;
-    // criar ficheiro de output
-    {
-        char* path = get_output_path(output_folder);
-        mystdout = open(path, O_CREAT | O_WRONLY, 0644);
-        free(path);
-    }
-
     char* progs[TASK_COMMAND_SIZE];
     int i = 0;
     char* string;

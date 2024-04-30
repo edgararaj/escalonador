@@ -304,16 +304,26 @@ int main(int argc, char* argv[])
                     }
                     b.wait_time = get_delta_ms(a.ts_start, ts_end);
 
+                    int mystdout;
+                    // criar ficheiro de output
+                    {
+                        char* path = get_output_path(argv[1], a.id);
+                        mystdout = open(path, O_CREAT | O_WRONLY, 0644);
+                        free(path);
+                    }
+
                     switch (a.type) {
                     case SINGLE:
-                        mysystem(a.file, argv[1]);
+                        mysystem(a.file, mystdout);
                         break;
                     case PIPELINE:
-                        mysystem_pipe(a.file, argv[1]);
+                        mysystem_pipe(a.file, mystdout);
                         break;
                     default:
                         break;
                     }
+
+                    close(mystdout);
 
                     if (clock_gettime(CLOCK_MONOTONIC, &ts_end) == -1) {
                         perror("clock_gettime");

@@ -14,16 +14,15 @@
 #include "status.h"
 #include "time.h"
 
-char* get_output_path(const char* output_folder)
+char* get_output_path(const char* output_folder, int pid)
 {
-    int pid = getpid();
     int pid_len = snprintf(NULL, 0, "%d", pid) + 1;
     char* path = malloc(strlen(output_folder) + pid_len + 5);
     sprintf(path, "%s/%d.txt", output_folder, pid);
     return path;
 }
 
-int mysystem(const char* command, const char* output_folder)
+int mysystem(const char* command, int mystdout)
 {
     int res = -1;
 
@@ -41,14 +40,6 @@ int mysystem(const char* command, const char* output_folder)
         perror("Error forking process");
         exit(EXIT_FAILURE);
     } else if (cpid == 0) {
-        int mystdout;
-        // criar ficheiro de output
-        {
-            char* path = get_output_path(output_folder);
-            mystdout = open(path, O_CREAT | O_WRONLY, 0644);
-            free(path);
-        }
-
         dup2(mystdout, 1); /* Move mystdout to FD 1 */
         dup2(mystdout, 2); /* Move mystdout to FD 2 */
 
