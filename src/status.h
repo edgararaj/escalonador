@@ -13,7 +13,7 @@ typedef enum {
 struct s {
     int id, time;
     Sts status;
-    char file[301];
+    char file[TASK_COMMAND_SIZE];
 };
 typedef struct st {
     struct s data;

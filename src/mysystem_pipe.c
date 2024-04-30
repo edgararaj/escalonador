@@ -129,7 +129,7 @@ void mysystem_pipe(char* args, const char* output_folder)
         free(path);
     }
 
-    char* progs[301];
+    char* progs[TASK_COMMAND_SIZE];
     int i = 0;
     char* string;
     char* command = strdup(args);

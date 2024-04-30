@@ -125,7 +125,7 @@ void returnStatus(Status a, int fd)
 {
     St x;
     int i;
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 2; i++) {
         for (x = a[i]->s; x; x = x->next) {
             write(fd, &(x->data), sizeof(struct s));
         }

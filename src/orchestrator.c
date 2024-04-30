@@ -45,7 +45,7 @@ char* get_tmp_filepath(const char* output_folder, const char* file)
     return path;
 }
 
-int handle_status(Msg t, int wfd, Status s)
+int handle_status(Msg t, int wfd, Status s, const char* completed_bin_path)
 {
     pid_t pid = fork();
     if (pid == -1) {
@@ -62,6 +62,23 @@ int handle_status(Msg t, int wfd, Status s)
         }
 
         returnStatus(s, callback_fd);
+        {
+            int completed_fd = open(completed_bin_path, O_RDONLY, 0644);
+            if (completed_fd != -1) {
+                Msg t;
+                while (read(completed_fd, &t, sizeof(Msg)) > 0) {
+                    struct s s = {};
+                    s.id = t.id;
+                    s.time = t.time;
+                    s.status = STS_TERMINATED;
+                    strncpy(s.file, t.command, TASK_COMMAND_SIZE);
+                    s.file[TASK_COMMAND_SIZE - 1] = '\0';
+
+                    write(callback_fd, &s, sizeof(struct s));
+                }
+                close(completed_fd);
+            }
+        }
 
         free(callback_fifo);
         close(callback_fd);
@@ -75,6 +92,20 @@ int handle_status(Msg t, int wfd, Status s)
         }
         _exit(0);
     }
+    return 1;
+}
+
+int log_termination_bin(Msg t, const char* completed_path)
+{
+    int completed_fd = open(completed_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
+    if (completed_fd == -1) {
+        perror("Error opening completed file");
+        return 0;
+    }
+
+    write(completed_fd, &t, sizeof(Msg));
+    close(completed_fd);
+
     return 1;
 }
 
@@ -157,6 +188,7 @@ int main(int argc, char* argv[])
     }
 
     char* completed_path = get_tmp_filepath(argv[1], "completed.txt");
+    char* completed_bin_path = get_tmp_filepath(argv[1], "completed.bin");
 
     int task_id = 0;
 
@@ -170,7 +202,7 @@ int main(int argc, char* argv[])
         switch (t.type) {
         // Messages from client
         case STATUS:
-            handle_status(t, wfd, s);
+            handle_status(t, wfd, s, completed_bin_path);
             break;
         case SINGLE:
         case PIPELINE: {
@@ -237,6 +269,7 @@ int main(int argc, char* argv[])
             }
 
             log_termination(t, completed_path);
+            log_termination_bin(t, completed_bin_path);
 
             // Retirar da lista de tarefas a correr
             Bin b;
