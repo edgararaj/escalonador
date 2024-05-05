@@ -2,6 +2,7 @@
 #define STATUS_H
 
 #include "queues.h"
+#define FILE_AUX "aux"
 
 typedef enum {
     STS_UNKNOWN = -2,

@@ -9,7 +9,7 @@
 
 void initStatus(Status a)
 {
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 2; i++) {
         a[i] = malloc(sizeof(Aux)); // Allocate memory for each Aux struct
         if (a[i] == NULL) {
             // Handle allocation failure if needed
@@ -24,7 +24,7 @@ void freeStatus(Status a)
 {
     int i;
     St x, tmp;
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 2; i++) {
         x = a[i]->s;
         while (x) {
             tmp = x;
@@ -33,6 +33,7 @@ void freeStatus(Status a)
         }
         free(a[i]);
     }
+    // apagar o ficheiro FILE_AUX
 }
 
 void schedTask(Status a, Bin b)
@@ -110,24 +111,51 @@ void terminateTask(Status a, Bin b)
         }
         prev->next = x->next;
     }
-    x->next = NULL;
     x->data.status = 1;
     x->data.time = b.time;
-    if (!a[2]->s) {
-        a[2]->s = a[2]->e = x;
-    } else {
-        a[2]->e->next = x;
-        a[2]->e = x;
+    int fd = open(FILE_AUX, O_CREAT | O_WRONLY, 0466);
+    if(fd == -1){
+        perror("Error in open:");
+        exit(EXIT_FAILURE);
     }
+    ssize_t wb = write(fd,&(x->data),sizeof(struct s));
+    if(wb == -1){
+        perror("Error in write:");
+        _exit(EXIT_FAILURE);
+    }
+    close(fd);
+    free(x);
+    
+    
 }
 
 void returnStatus(Status a, int fd)
 {
     St x;
     int i;
+    ssize_t wb;
     for (i = 0; i < 2; i++) {
         for (x = a[i]->s; x; x = x->next) {
-            write(fd, &(x->data), sizeof(struct s));
+            wb = write(fd, &(x->data), sizeof(struct s));
+            if(wb == -1){
+                perror("Error in write:");
+                _exit(EXIT_FAILURE);
+            }
         }
     }
+    ssize_t rb;
+    struct s b;
+    int p = open(FILE_AUX, O_CREAT | O_RDONLY);
+    while((rb = read(p,&b, sizeof(struct s))) > 0){
+        wb = write(fd,&b,sizeof(struct s));
+        if(wb == -1){
+                perror("Error in write:");
+                _exit(EXIT_FAILURE);
+            }
+    }
+    if(rb == -1){
+        perror("Error in read:");
+        _exit(EXIT_FAILURE);
+    }
+
 }
