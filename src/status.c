@@ -88,7 +88,7 @@ void execTask(Status a, Bin b)
     }
 }
 
-void terminateTask(Status a, Bin b)
+void terminateTask(Status a, Bin b, const char* completed_bin_path)
 {
     St x;
     if (a[1]->e == a[1]->s) {
@@ -113,23 +113,21 @@ void terminateTask(Status a, Bin b)
     }
     x->data.status = 1;
     x->data.time = b.time;
-    int fd = open(FILE_AUX, O_CREAT | O_WRONLY, 0466);
-    if(fd == -1){
+    int fd = open(completed_bin_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
+    if (fd == -1) {
         perror("Error in open:");
         exit(EXIT_FAILURE);
     }
-    ssize_t wb = write(fd,&(x->data),sizeof(struct s));
-    if(wb == -1){
+    ssize_t wb = write(fd, &(x->data), sizeof(struct s));
+    if (wb == -1) {
         perror("Error in write:");
         _exit(EXIT_FAILURE);
     }
     close(fd);
     free(x);
-    
-    
 }
 
-void returnStatus(Status a, int fd)
+void returnStatus(Status a, int fd, const char* completed_bin_path)
 {
     St x;
     int i;
@@ -137,7 +135,7 @@ void returnStatus(Status a, int fd)
     for (i = 0; i < 2; i++) {
         for (x = a[i]->s; x; x = x->next) {
             wb = write(fd, &(x->data), sizeof(struct s));
-            if(wb == -1){
+            if (wb == -1) {
                 perror("Error in write:");
                 _exit(EXIT_FAILURE);
             }
@@ -145,17 +143,20 @@ void returnStatus(Status a, int fd)
     }
     ssize_t rb;
     struct s b;
-    int p = open(FILE_AUX, O_CREAT | O_RDONLY);
-    while((rb = read(p,&b, sizeof(struct s))) > 0){
-        wb = write(fd,&b,sizeof(struct s));
-        if(wb == -1){
-                perror("Error in write:");
-                _exit(EXIT_FAILURE);
-            }
+    int p = open(completed_bin_path, O_RDONLY);
+    while ((rb = read(p, &b, sizeof(struct s))) > 0) {
+        wb = write(fd, &b, sizeof(struct s));
+        if (wb == -1) {
+            perror("Error in write:");
+            _exit(EXIT_FAILURE);
+        }
     }
-    if(rb == -1){
+    if (rb == -1) {
         perror("Error in read:");
         _exit(EXIT_FAILURE);
     }
-
+    if (close(p) == -1) {
+        perror("Error in close:");
+        _exit(EXIT_FAILURE);
+    }
 }

@@ -2,7 +2,6 @@
 #define STATUS_H
 
 #include "queues.h"
-#define FILE_AUX "aux"
 
 typedef enum {
     STS_UNKNOWN = -2,
@@ -25,11 +24,11 @@ typedef struct aux {
 } Aux;
 typedef Aux* Status[3];
 // mudar de int para o tipo do pid
-void returnStatus(Status a, int fd);
+void returnStatus(Status a, int fd, const char* completed_bin_path);
 void initStatus(Status a);
 void freeStatus(Status a);
 void schedTask(Status a, Bin b);
 void execTask(Status a, Bin b);
-void terminateTask(Status a, Bin b);
+void terminateTask(Status a, Bin b, const char* completed_bin_path);
 
 #endif
