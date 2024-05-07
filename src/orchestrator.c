@@ -64,15 +64,19 @@ int handle_status(Msg t, int wfd, Status s, const char* completed_bin_path)
         returnStatus(s, callback_fd, completed_bin_path);
 
         free(callback_fifo);
-        close(callback_fd);
+        if (close(callback_fd) == -1) {
+            perror("Error closing callback_fd:");
+            exit(EXIT_FAILURE);
+        }
 
         Msg m;
         m.pid = getpid();
         m.type = KILL;
-        ssize_t written_bytes = write(wfd, &m, sizeof(Msg));
-        if (written_bytes == -1) {
-            perror("Nao consegui escrever:");
+        if (write(wfd, &m, sizeof(Msg)) == -1) {
+            perror("Error writing the MSG:");
+            _exit(EXIT_FAILURE);
         }
+        
         _exit(0);
     }
     return 1;
@@ -91,10 +95,18 @@ int log_termination(Msg t, const char* completed_path)
     int milliseconds = t.time % 1000;
     int wait_seconds = t.wait_time / 1000;
     int wait_milliseconds = t.wait_time % 1000;
+
     printf("-- ID %d: Terminou após %d.%03d seg\n", t.id, seconds, milliseconds);
     sprintf(buf, "%d: %s [%d.%03ds] (%d.%03ds)\n", t.id, t.command, seconds, milliseconds, wait_seconds, wait_milliseconds);
-    write(completed_fd, buf, strlen(buf));
-    close(completed_fd);
+
+    if (write(completed_fd, buf, strlen(buf)) == -1) {
+        perror("Error writing to completed_fd");
+        return 0;
+    }
+    if (close(completed_fd) == -1) {
+        perror("Error closing completed_fd");
+        return 0;
+    }
 
     return 1;
 }
@@ -137,7 +149,12 @@ int main(int argc, char* argv[])
     }
     int tasks_running = 0; // Number of tasks running
 
-    mkfifo(TASK_FIFO, 0644);
+    if (mkfifo(TASK_FIFO, 0644) == -1) {
+        perror("Error writing to completed_fd");
+        freeMinHeap(&minq);
+        freeStatus(s);
+        return EXIT_FAILURE;
+    }
 
     int fd = open(TASK_FIFO, O_RDONLY);
     if (fd == -1) {
@@ -188,7 +205,10 @@ int main(int argc, char* argv[])
                 closed = 1;
 
                 int invalid_task_id = -1;
-                write(callback_fd, &invalid_task_id, sizeof(int));
+                if (write(callback_fd, &invalid_task_id, sizeof(int)) == -1) {
+                    perror("Error writing to callback_fd:");
+                    exit(EXIT_FAILURE);
+                }
             } else if (!closed) {
                 // if (t.type == PIPELINE) {
                 //     printf("PIPELINE: %s\n", t.command);
@@ -209,11 +229,17 @@ int main(int argc, char* argv[])
                 schedTask(s, bin);
 
                 int task_id = bin.id;
-                write(callback_fd, &task_id, sizeof(int));
+                if (write(callback_fd, &task_id, sizeof(int)) == -1) {
+                    perror("Error writing to callback_fd:");
+                    exit(EXIT_FAILURE);
+                }
             }
 
             free(callback_fifo);
-            close(callback_fd);
+            if (close(callback_fd) == -1) {
+                perror("Error closing callback_fd:");
+                exit(EXIT_FAILURE);
+            }
         } break;
         // Messages from server
         case KILL: {
@@ -291,7 +317,10 @@ int main(int argc, char* argv[])
                         break;
                     }
 
-                    close(mystdout);
+                    if (close(mystdout) == -1) {
+                        perror("Error closing mystdout:");
+                        exit(EXIT_FAILURE);
+                    }
 
                     if (clock_gettime(CLOCK_MONOTONIC, &ts_end) == -1) {
                         perror("clock_gettime");
@@ -304,7 +333,10 @@ int main(int argc, char* argv[])
                     b.type = TERMINATED;
                     b.pid = getpid();
                     b.id = a.id;
-                    write(wfd, &b, sizeof(Msg));
+                    if (write(wfd, &b, sizeof(Msg)) == -1) {
+                        perror("Error writing MSG to FIFO:");
+                        _exit(EXIT_FAILURE);
+                    }
 
                     free(a.file);
                     _exit(0);
@@ -316,9 +348,18 @@ int main(int argc, char* argv[])
         }
     }
 
-    close(fd);
-    close(wfd);
-    unlink(TASK_FIFO);
+    if (close(fd) == -1){
+        perro("Error closing TASK_FIFO:");
+        exit(EXIT_FAILURE);
+    }
+    if (close(wfd) == -1) {
+        perro("Error closing TASK_FIFO for writing:");
+        exit(EXIT_FAILURE);
+    }
+    if (unlink(TASK_FIFO) == -1) {
+        perro("Error unlinking TASK_FIFO:");
+        exit(EXIT_FAILURE);
+    }
     freeStatus(s);
     free(completed_path);
 

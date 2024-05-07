@@ -16,6 +16,11 @@ char* get_callback_filepath()
     int len = snprintf(NULL, 0, "/tmp/escalonador_%d", getpid()) + 1;
     char* path = malloc(len);
 
+    if(path == NULL){
+        printf("Debug: Error in malloc");
+        return NULL;
+    }
+
     // A terminating null character is automatically appended after the content written.
     sprintf(path, "/tmp/escalonador_%d", getpid());
 
@@ -25,14 +30,21 @@ char* get_callback_filepath()
 int main(int argc, char* argv[])
 {
     if (argc > 1 && strcmp(argv[1], "status") == 0) {
-        mkfifo(TASK_FIFO, 0644);
+        if (mkfifo(TASK_FIFO, 0644) == -1) {
+            perror("Error making the FIFO:");
+            exit(EXIT_FAILURE);
+        }
 
         char* callback_fifo = get_callback_filepath();
-        mkfifo(callback_fifo, 0644);
+
+        if (mkfifo(callback_fifo, 0644) == -1) {
+            perror("Error making the FIFO:");
+            exit(EXIT_FAILURE);
+        }
 
         int fd = open(TASK_FIFO, O_WRONLY);
         if (fd == -1) {
-            perror("Error opening FIFO for writing");
+            perror("Error opening FIFO for writing:");
             exit(EXIT_FAILURE);
         }
 
@@ -41,21 +53,27 @@ int main(int argc, char* argv[])
         t.type = STATUS;
 
         if (write(fd, &t, sizeof(Msg)) == -1) {
-            perror("Error writing to FIFO");
+            perror("Error writing to FIFO:");
             close(fd);
             exit(EXIT_FAILURE);
         }
-        close(fd);
+
+        if (close(fd) == -1){
+            perror("Error closing FIFO:");
+            exit(EXIT_FAILURE);
+
+        }
 
         int callback_fd = open(callback_fifo, O_RDONLY);
         if (callback_fd == -1) {
-            perror("Error opening callback FIFO for reading");
+            perror("Error opening callback FIFO for reading:");
             exit(EXIT_FAILURE);
         }
 
         struct s task;
         int prev_sts = STS_UNKNOWN;
-        while (read(callback_fd, &task, sizeof(struct s)) > 0) {
+        ssize_t rb;
+        while ((rb = read(callback_fd, &task, sizeof(struct s)) > 0) > 0) {
             if (task.status != prev_sts) {
                 switch (task.status) {
                 case STS_SCHEDULED:
@@ -79,12 +97,24 @@ int main(int argc, char* argv[])
             }
         }
 
+        if(rb == -1){
+            perror("Error reading from FIFO:");
+            exit(EXIT_FAILURE);
+        }
+
         if (prev_sts == STS_UNKNOWN) {
             printf("No tasks\n");
         }
 
-        close(callback_fd);
-        unlink(callback_fifo);
+        if (close(callback_fd) == -1) {
+            perror("Error closing callback_fd:");
+            exit(EXIT_FAILURE);
+        }
+
+        if (unlink(callback_fifo) == -1) {
+            perror("Error in the unlink:");
+            exit(EXIT_FAILURE);
+        }
         free(callback_fifo);
     } else if (argc > 4 && strcmp(argv[1], "execute") == 0) {
         if (strcmp(argv[3], "-u") == 0 || strcmp(argv[3], "-p") == 0) {
@@ -94,10 +124,17 @@ int main(int argc, char* argv[])
 
             printf("Time: %d, Command: %s\n", time, cmd);
 
-            mkfifo(TASK_FIFO, 0644);
+            if (mkfifo(TASK_FIFO, 0644) == -1) {
+                perror("Error making the TASK_FIFO:");
+                exit(EXIT_FAILURE);
+            }
 
             char* callback_fifo = get_callback_filepath();
-            mkfifo(callback_fifo, 0644);
+
+            if (mkfifo(callback_fifo, 0644) == -1) {
+                perror("Error making the callback_fifo:");
+                exit(EXIT_FAILURE);
+            }
 
             int fd = open(TASK_FIFO, O_WRONLY);
             if (fd == -1) {
@@ -119,11 +156,14 @@ int main(int argc, char* argv[])
             t.command[TASK_COMMAND_SIZE - 1] = '\0';
 
             if (write(fd, &t, sizeof(Msg)) == -1) {
-                perror("Error writing to FIFO");
+                perror("Error writing to FIFO:");
                 close(fd);
                 exit(EXIT_FAILURE);
             }
-            close(fd);
+            if (close(fd) == -1) {
+                perror("Error closing FIFO:");
+                exit(EXIT_FAILURE);
+            }
 
             int callback_fd = open(callback_fifo, O_RDONLY);
             if (callback_fd == -1) {
@@ -140,8 +180,14 @@ int main(int argc, char* argv[])
 
             printf("Task ID: %d\n", task_pid);
 
-            close(callback_fd);
-            unlink(callback_fifo);
+            if (close(callback_fd) == -1) {
+                perror("Error closing callback_fd:");
+                exit(EXIT_FAILURE);
+            }
+            if (unlink(callback_fifo) == -1) {
+                perror("Error in the unlink:");
+                exit(EXIT_FAILURE);
+            }
             free(callback_fifo);
         } else {
             printf("Invalid option %s\n", argv[3]);

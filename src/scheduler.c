@@ -81,8 +81,12 @@ void insert(MinHeap* m, Bin a)
 {
     if (m->size == m->used) {
         m->size *= 2;
-        // falta verificar o realloc...
+
         m->args = realloc(m->args, sizeof(Bin) * m->size);
+        if(m->args == NULL){
+            perror("Erro in realloc:");
+            _exit(EXIT_FAILURE);
+        }
     }
 
     m->args[m->used].file = strdup(a.file);

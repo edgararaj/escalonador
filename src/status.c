@@ -33,7 +33,7 @@ void freeStatus(Status a)
         }
         free(a[i]);
     }
-    // apagar o ficheiro FILE_AUX
+
 }
 
 void schedTask(Status a, Bin b)
@@ -74,7 +74,7 @@ void execTask(Status a, Bin b)
             prev = x;
         }
         if (x == NULL) {
-            perror("x == NULL");
+            printf("Debug:task nao esta a executar\n");
         }
         prev->next = x->next;
     }
@@ -115,15 +115,18 @@ void terminateTask(Status a, Bin b, const char* completed_bin_path)
     x->data.time = b.time;
     int fd = open(completed_bin_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
     if (fd == -1) {
-        perror("Error in open:");
+        perror("Error opening completed_bin_path:");
         exit(EXIT_FAILURE);
     }
     ssize_t wb = write(fd, &(x->data), sizeof(struct s));
     if (wb == -1) {
-        perror("Error in write:");
+        perror("Error in write to completed_bin_path:");
         _exit(EXIT_FAILURE);
     }
-    close(fd);
+    if(close(fd) == -1){
+        perror("Error closing completed_bin_path:");
+        _exit(EXIT_FAILURE);
+    }
     free(x);
 }
 
@@ -144,19 +147,24 @@ void returnStatus(Status a, int fd, const char* completed_bin_path)
     ssize_t rb;
     struct s b;
     int p = open(completed_bin_path, O_RDONLY);
+
+    if (p == -1) {
+        perror("Error opening completed_bin_path:");
+            _exit(EXIT_FAILURE);
+    }
     while ((rb = read(p, &b, sizeof(struct s))) > 0) {
         wb = write(fd, &b, sizeof(struct s));
         if (wb == -1) {
-            perror("Error in write:");
+            perror("Error writing to completed_bin_path:");
             _exit(EXIT_FAILURE);
         }
     }
     if (rb == -1) {
-        perror("Error in read:");
+        perror("Error reading from completed_bin_path:");
         _exit(EXIT_FAILURE);
     }
     if (close(p) == -1) {
-        perror("Error in close:");
+        perror("Error closing completed_bin_path:");
         _exit(EXIT_FAILURE);
     }
 }

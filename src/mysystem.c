@@ -37,10 +37,14 @@ int mysystem(const char* command, int mystdout)
 
     pid_t cpid = fork();
     if (cpid == -1) {
-        perror("Error forking process");
-        exit(EXIT_FAILURE);
+        perror("Error forking process:");
+        _exit(EXIT_FAILURE);
     } else if (cpid == 0) {
-        dup2(mystdout, 1); /* Move mystdout to FD 1 */
+
+        if (dup2(mystdout, 1) == -1) {
+            perror("Error forking process:");
+            _exit(EXIT_FAILURE);
+        } /* Move mystdout to FD 1 */
         dup2(mystdout, 2); /* Move mystdout to FD 2 */
 
         execvp(exec_args[0], exec_args);

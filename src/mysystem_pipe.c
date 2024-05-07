@@ -47,64 +47,139 @@ void pipeLine(char* progs[], int n, int mystdout)
 
     for (i = 0; i < n; i++) {
         if (i == 0) {
-            pipe(p[i]);
+            if(pipe(p[i]) == -1) {
+                perror("Error creating pipe:");
+                _exit(EXIT_FAILURE);
+            }
+
             pid = fork();
+
             if (pid == -1) {
                 perror("Error in the Pipe Line:");
-                _exit(255);
+                _exit(EXIT_FAILURE);
             } else if (pid == 0) {
-                dup2(mystdout, 2); /* Move mystdout to FD 2 */
-                close(p[i][0]);
 
-                dup2(p[i][1], 1);
-                close(p[i][1]);
+                if (dup2(mystdout, 2) == -1) {
+                    perror("Error in dup2 to stderr:");
+                    _exit(EXIT_FAILURE);
+                }/* Move mystdout to FD 2 and verify error */
+
+                if (close(p[i][0]) == -1) {
+                    perror("Error closing pipe:");
+                    _exit(EXIT_FAILURE);
+                }
+
+                if (dup2(p[i][1], 1) == -1) {
+                    perror("Error in dup2 to stdout:");
+                    _exit(EXIT_FAILURE);
+                }
+
+                if (close(p[i][1]) == -1) {
+                    perror("Error closing pipe:");
+                    _exit(EXIT_FAILURE);
+                }
 
                 exec_command(progs[i]);
-                _exit(0);
+                _exit(EXIT_SUCCESS);
+
             } else {
-                close(p[i][1]);
+                if (close(p[i][1]) == -1) {
+                    perror("Error closing pipe:");
+                    _exit(EXIT_FAILURE);
+                }
             }
 
         } else if (i == n - 1) {
+
             pid = fork();
+
             if (pid == -1) {
                 perror("Error in the Pipe Line:");
                 _exit(255);
             } else if (pid == 0) {
-                dup2(p[i - 1][0], 0);
-                close(p[i - 1][0]);
 
-                dup2(mystdout, 1); /* Move mystdout to FD 1 */
-                dup2(mystdout, 2); /* Move mystdout to FD 2 */
+                if (dup2(p[i - 1][0], 0) == -1) {
+                    perror("Error in dup2 to stdin:");
+                    _exit(EXIT_FAILURE);
+                }
+
+                if (close(p[i - 1][0]) == -1) {
+                    perror("Error closing pipe:");
+                    _exit(EXIT_FAILURE);
+                }
+
+                if (dup2(mystdout, 1) == -1) {  
+                    perror("Error in dup2 to stdout:");
+                    _exit(EXIT_FAILURE);
+                } /* Move mystdout to FD 1 and verify error */
+
+                if (dup2(mystdout, 2) == -1) {
+                    perror("Error in dup2 to stderr:");
+                    _exit(EXIT_FAILURE);
+                } /* Move mystdout to FD 2 and verify error */
 
                 exec_command(progs[i]);
-                _exit(0);
+                _exit(EXIT_SUCCESS);
             } else {
-                close(p[i - 1][0]);
+                if (close(p[i - 1][0]) == -1) {
+                    perror("Error closing pipe:");
+                    _exit(EXIT_FAILURE);
+                }
             }
         } else {
 
-            pipe(p[i]); // create the pipe
+            if (pipe(p[i]) == -1) {
+                perror("Error creating pipe:");
+                _exit(EXIT_FAILURE);
+            } // create the pipe and verify error
 
             pid = fork();
             if (pid == -1) {
                 perror("Error in the Pipe Line:");
-                _exit(255);
+                _exit(EXIT_FAILURE);
             } else if (pid == 0) {
-                dup2(mystdout, 2); /* Move mystdout to FD 2 */
+                if (dup2(mystdout, 2) == -1) {
+                    perror("Error in dup2 to stderr:");
+                    _exit(EXIT_FAILURE);
+                } /* Move mystdout to FD 2 and verify errpr*/
 
-                dup2(p[i - 1][0], 0);
-                close(p[i - 1][0]);
+                if (dup2(p[i - 1][0], 0) == -1) {
+                    perror("Error in dup2 to stdin:");
+                    _exit(EXIT_FAILURE);
+                }
 
-                close(p[i][0]);
-                dup2(p[i][1], 1);
-                close(p[i][1]);
+                if (close(p[i - 1][0]) == -1) {
+                    perror("Error closing pipe:");
+                    _exit(EXIT_FAILURE);
+                }
+
+                if (close(p[i][0]) == -1) {
+                    perror("Error closing pipe:");
+                    _exit(EXIT_FAILURE);
+                }
+
+                if (dup2(p[i][1], 1) == -1) {
+                    perror("Error in dup2 to stdout:");
+                    _exit(EXIT_FAILURE);
+                }
+
+                if (close(p[i][1]) == -1) {
+                    perror("Error closing pipe:");
+                    _exit(EXIT_FAILURE);
+                }
 
                 exec_command(progs[i]);
-                _exit(0);
+                _exit(EXIT_SUCCESS);
             } else {
-                close(p[i - 1][0]);
-                close(p[i][1]);
+
+                if (close(p[i - 1][0]) == -1) {
+                    perror("Error closing pipe:");
+                    _exit(EXIT_FAILURE);
+                }
+                if (close(p[i][1]) == -1) {
+                    perror("Error closing pipe:");
+                    _exit(EXIT_FAILURE);
+                }
             }
         }
     }
@@ -114,7 +189,7 @@ void pipeLine(char* progs[], int n, int mystdout)
 
         if (WIFEXITED(status) && WEXITSTATUS(status)) {
             perror("Error in the status collection:");
-            _exit(255);
+            _exit(EXIT_FAILURE);
         }
     }
 }
