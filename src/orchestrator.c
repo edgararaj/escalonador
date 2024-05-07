@@ -76,7 +76,7 @@ int handle_status(Msg t, int wfd, Status s, const char* completed_bin_path)
             perror("Error writing the MSG:");
             _exit(EXIT_FAILURE);
         }
-        
+
         _exit(0);
     }
     return 1;
@@ -348,16 +348,16 @@ int main(int argc, char* argv[])
         }
     }
 
-    if (close(fd) == -1){
-        perro("Error closing TASK_FIFO:");
+    if (close(fd) == -1) {
+        perror("Error closing TASK_FIFO:");
         exit(EXIT_FAILURE);
     }
     if (close(wfd) == -1) {
-        perro("Error closing TASK_FIFO for writing:");
+        perror("Error closing TASK_FIFO for writing:");
         exit(EXIT_FAILURE);
     }
     if (unlink(TASK_FIFO) == -1) {
-        perro("Error unlinking TASK_FIFO:");
+        perror("Error unlinking TASK_FIFO:");
         exit(EXIT_FAILURE);
     }
     freeStatus(s);

@@ -83,7 +83,7 @@ void insert(MinHeap* m, Bin a)
         m->size *= 2;
 
         m->args = realloc(m->args, sizeof(Bin) * m->size);
-        if(m->args == NULL){
+        if (m->args == NULL) {
             perror("Erro in realloc:");
             _exit(EXIT_FAILURE);
         }

@@ -16,7 +16,7 @@ char* get_callback_filepath()
     int len = snprintf(NULL, 0, "/tmp/escalonador_%d", getpid()) + 1;
     char* path = malloc(len);
 
-    if(path == NULL){
+    if (path == NULL) {
         printf("Debug: Error in malloc");
         return NULL;
     }
@@ -58,10 +58,9 @@ int main(int argc, char* argv[])
             exit(EXIT_FAILURE);
         }
 
-        if (close(fd) == -1){
+        if (close(fd) == -1) {
             perror("Error closing FIFO:");
             exit(EXIT_FAILURE);
-
         }
 
         int callback_fd = open(callback_fifo, O_RDONLY);
@@ -97,7 +96,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        if(rb == -1){
+        if (rb == -1) {
             perror("Error reading from FIFO:");
             exit(EXIT_FAILURE);
         }

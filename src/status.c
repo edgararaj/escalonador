@@ -33,7 +33,6 @@ void freeStatus(Status a)
         }
         free(a[i]);
     }
-
 }
 
 void schedTask(Status a, Bin b)
@@ -123,7 +122,7 @@ void terminateTask(Status a, Bin b, const char* completed_bin_path)
         perror("Error in write to completed_bin_path:");
         _exit(EXIT_FAILURE);
     }
-    if(close(fd) == -1){
+    if (close(fd) == -1) {
         perror("Error closing completed_bin_path:");
         _exit(EXIT_FAILURE);
     }
@@ -150,7 +149,7 @@ void returnStatus(Status a, int fd, const char* completed_bin_path)
 
     if (p == -1) {
         perror("Error opening completed_bin_path:");
-            _exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
     while ((rb = read(p, &b, sizeof(struct s))) > 0) {
         wb = write(fd, &b, sizeof(struct s));

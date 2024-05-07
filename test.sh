@@ -7,7 +7,7 @@ if [ "$1" != "FCFS" ] && [ "$1" != "SJF" ]; then
 fi
 
 rm -f tmp/* /tmp/escalonador*
-time bin/orchestrator tmp 3 $1 && ./mean_time.sh tmp/completed.txt && echo '' &
+time bin/orchestrator tmp 3 $1 > /dev/null && ./mean_time.sh tmp/completed.txt && echo '' &
 
 bin/client execute 100 -u 'test/hello 6' > /dev/null
 bin/client execute 100 -u 'test/hello 6' > /dev/null

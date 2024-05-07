@@ -24,7 +24,6 @@ typedef struct aux {
 } Aux;
 typedef Aux* Status[3];
 
-
 void returnStatus(Status a, int fd, const char* completed_bin_path);
 void initStatus(Status a);
 void freeStatus(Status a);

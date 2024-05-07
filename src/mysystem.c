@@ -42,12 +42,19 @@ int mysystem(const char* command, int mystdout)
     } else if (cpid == 0) {
 
         if (dup2(mystdout, 1) == -1) {
-            perror("Error forking process:");
+            perror("Error dup2 to stdout:");
             _exit(EXIT_FAILURE);
-        } /* Move mystdout to FD 1 */
-        dup2(mystdout, 2); /* Move mystdout to FD 2 */
+        }
 
-        execvp(exec_args[0], exec_args);
+        if (dup2(mystdout, 2) == -1) {
+            perror("Error dup2 to stderr:");
+            _exit(EXIT_FAILURE);
+        }
+
+        if (execvp(exec_args[0], exec_args) == -1) {
+            perror("Error executing process:");
+            _exit(EXIT_FAILURE);
+        }
 
         _exit(-1);
     } else if (cpid > 0) {

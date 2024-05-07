@@ -47,7 +47,7 @@ void pipeLine(char* progs[], int n, int mystdout)
 
     for (i = 0; i < n; i++) {
         if (i == 0) {
-            if(pipe(p[i]) == -1) {
+            if (pipe(p[i]) == -1) {
                 perror("Error creating pipe:");
                 _exit(EXIT_FAILURE);
             }
@@ -62,7 +62,7 @@ void pipeLine(char* progs[], int n, int mystdout)
                 if (dup2(mystdout, 2) == -1) {
                     perror("Error in dup2 to stderr:");
                     _exit(EXIT_FAILURE);
-                }/* Move mystdout to FD 2 and verify error */
+                } /* Move mystdout to FD 2 and verify error */
 
                 if (close(p[i][0]) == -1) {
                     perror("Error closing pipe:");
@@ -108,7 +108,7 @@ void pipeLine(char* progs[], int n, int mystdout)
                     _exit(EXIT_FAILURE);
                 }
 
-                if (dup2(mystdout, 1) == -1) {  
+                if (dup2(mystdout, 1) == -1) {
                     perror("Error in dup2 to stdout:");
                     _exit(EXIT_FAILURE);
                 } /* Move mystdout to FD 1 and verify error */
